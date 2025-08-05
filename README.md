@@ -1,6 +1,6 @@
 # Appoint-App 📅
 
-**Appoint-App** is a full-featured appointment booking web application built with React, TypeScript, TailwindCSS, and Firebase. It’s designed to help small businesses — like salons and personal service providers — manage customer bookings while giving users a smooth experience to browse services and book appointments online.
+**Appoint-App** is a full-featured appointment booking web application built with React, TypeScript, TailwindCSS, and Firebase. It’s designed to help small businesses, like salons and personal service providers, manage customer bookings while giving users a smooth experience to browse services and book appointments online.
 
 ---
 
