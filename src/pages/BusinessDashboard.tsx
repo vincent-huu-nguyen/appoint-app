@@ -30,6 +30,17 @@ const BusinessDashboard = () => {
     const [editingApptId, setEditingApptId] = useState<string | null>(null);
     const [editedDate, setEditedDate] = useState("");
     const [editedTime, setEditedTime] = useState("");
+    const [descriptionInput, setDescriptionInput] = useState("");
+    const [services, setServices] = useState<{ name: string; price: number; duration: number }[]>([]);
+    const [newServiceName, setNewServiceName] = useState("");
+    const [newServicePrice, setNewServicePrice] = useState("");
+    const [newServiceDuration, setNewServiceDuration] = useState("");
+    const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
+    const [editedService, setEditedService] = useState<{ name: string; price: number; duration: number }>({
+        name: "",
+        price: 0,
+        duration: 0,
+    });
 
 
     const formatPhoneNumber = (phone: string) => {
@@ -70,7 +81,9 @@ const BusinessDashboard = () => {
             const ref = doc(db, "users", user.uid);
             const snap = await getDoc(ref);
             if (snap.exists()) {
-                setBusinessInfo(snap.data());
+                const data = snap.data();
+                setBusinessInfo(data);
+                setServices(data.services || []);
             }
         };
 
@@ -119,6 +132,8 @@ const BusinessDashboard = () => {
                 phone: phoneInput,
                 role: "admin",
                 email: businessInfo?.email,
+                description: descriptionInput,
+                services,
             },
             { merge: true }
         );
@@ -153,18 +168,20 @@ const BusinessDashboard = () => {
                 <h1 className="text-2xl font-semibold">
                     {showProfile ? "Your Profile" : "Your Appointments"}
                 </h1>
-                <button
-                    onClick={() => setShowProfile((prev) => !prev)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                >
-                    {showProfile ? "View Your Appointments" : "View My Profile"}
-                </button>
-                <button
-                    onClick={handleLogout}
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                >
-                    Logout
-                </button>
+                <div>
+                    <button
+                        onClick={() => setShowProfile((prev) => !prev)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    >
+                        {showProfile ? "View Your Appointments" : "View My Profile"}
+                    </button>
+                    <button
+                        onClick={handleLogout}
+                        className="bg-red-600 text-white px-4 py-2 ml-2 rounded hover:bg-red-700"
+                    >
+                        Logout
+                    </button>
+                </div>
             </div>
 
             {showProfile ? (
@@ -217,6 +234,126 @@ const BusinessDashboard = () => {
                                     onChange={(e) => setPhoneInput(e.target.value)}
                                     className="border p-2 w-full rounded"
                                 />
+                                <textarea
+                                    placeholder="Description"
+                                    value={descriptionInput}
+                                    onChange={(e) => setDescriptionInput(e.target.value)}
+                                    className="border p-2 w-full rounded h-24 resize-none"
+                                />
+                                <div className="space-y-2 text-left">
+                                    <h3 className="text-lg font-semibold">Services</h3>
+                                    {services.map((service, idx) => (
+                                        <div key={idx} className="flex gap-2 text-sm items-center">
+                                            {editingServiceIndex === idx ? (
+                                                <>
+                                                    <input
+                                                        type="text"
+                                                        value={editedService.name}
+                                                        onChange={(e) => setEditedService({ ...editedService, name: e.target.value })}
+                                                        className="border p-1 rounded w-1/3"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        value={editedService.price}
+                                                        onChange={(e) => setEditedService({ ...editedService, price: parseFloat(e.target.value) })}
+                                                        className="border p-1 rounded w-1/3"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        value={editedService.duration}
+                                                        onChange={(e) => setEditedService({ ...editedService, duration: parseInt(e.target.value) })}
+                                                        className="border p-1 rounded w-1/3"
+                                                    />
+                                                    <button
+                                                        className="text-green-600 text-xs font-medium"
+                                                        onClick={() => {
+                                                            const updated = [...services];
+                                                            updated[idx] = editedService;
+                                                            setServices(updated);
+                                                            setEditingServiceIndex(null);
+                                                        }}
+                                                    >
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        className="text-gray-500 text-xs font-medium"
+                                                        onClick={() => setEditingServiceIndex(null)}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="w-1/3">{service.name}</span>
+                                                    <span className="w-1/3">${service.price.toFixed(2)}</span>
+                                                    <span className="w-1/3">{service.duration} min</span>
+                                                    <button
+                                                        className="text-blue-600 text-xs font-medium"
+                                                        onClick={() => {
+                                                            setEditingServiceIndex(idx);
+                                                            setEditedService(service);
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        className="text-red-600 text-xs font-medium"
+                                                        onClick={() => {
+                                                            const updated = services.filter((_, i) => i !== idx);
+                                                            setServices(updated);
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    <div className="flex gap-2 mt-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Service Name"
+                                            value={newServiceName}
+                                            onChange={(e) => setNewServiceName(e.target.value)}
+                                            className="border p-2 rounded w-1/3"
+                                        />
+                                        <input
+                                            type="number"
+                                            placeholder="Price"
+                                            value={newServicePrice}
+                                            onChange={(e) => setNewServicePrice(e.target.value)}
+                                            className="border p-2 rounded w-1/3"
+                                        />
+                                        <input
+                                            type="number"
+                                            placeholder="Duration (min)"
+                                            value={newServiceDuration}
+                                            onChange={(e) => setNewServiceDuration(e.target.value)}
+                                            className="border p-2 rounded w-1/3"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            if (!newServiceName || !newServicePrice || !newServiceDuration) return;
+                                            setServices([
+                                                ...services,
+                                                {
+                                                    name: newServiceName,
+                                                    price: parseFloat(newServicePrice),
+                                                    duration: parseInt(newServiceDuration),
+                                                },
+                                            ]);
+                                            setNewServiceName("");
+                                            setNewServicePrice("");
+                                            setNewServiceDuration("");
+                                        }}
+                                        className="mt-2 bg-blue-600 text-white px-3 py-1 rounded"
+                                    >
+                                        Add Service
+                                    </button>
+                                </div>
+
                                 <div className="flex gap-4 justify-center">
                                     <button
                                         onClick={handleSaveProfile}
@@ -233,17 +370,51 @@ const BusinessDashboard = () => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="space-y-2 mt-4 text-center">
-                                <h2 className="text-2xl font-bold text-gray-800 mb-1">{businessInfo?.businessName}</h2>
+                            <>
+                                <div className="space-y-2 mt-4 text-center">
+                                    <h2 className="text-2xl font-bold text-gray-800 mb-1">{businessInfo?.businessName}</h2>
+                                    <p className="text-gray-600 mb-1">
+                                        <span className="font-bold">Owner:</span> {businessInfo?.name || "N/A"}
+                                    </p>
+                                    <p className="text-gray-600 mb-4">
+                                        <span className="font-bold">Phone:</span>{" "}
+                                        {formatPhoneNumber(businessInfo?.phone || "")}
+                                    </p>
+                                    <p className="text-gray-600 pt-2">
+                                        {businessInfo?.description || "N/A"}
+                                    </p>
+                                </div>
 
-                                <p className="text-gray-600 mb-1">
-                                    <span className="font-semibold">Owner:</span> {businessInfo?.name || "N/A"}
-                                </p>
-                                <p className="text-gray-600 mb-4">
-                                    <span className="font-semibold">Phone:</span>{" "}
-                                    {formatPhoneNumber(businessInfo?.phone || "")}
-                                </p>
-                            </div>
+                                {services.length > 0 && (
+                                    <div className="mt-4 text-left">
+                                        <h3 className="text-gray-700 font-bold pt-5 mb-2 text-center">Services Offered:</h3>
+                                        <div className="mt-4">
+                                            {/* Header row */}
+                                            <div className="grid grid-cols-3 font-semibold text-sm border-b pb-1 mb-2 text-center">
+                                                <span>Service</span>
+                                                <span>Price</span>
+                                                <span>Duration</span>
+                                            </div>
+
+                                            {/* Data rows */}
+                                            <ul className="space-y-1">
+                                                {services.map((s, i) => (
+                                                    <li
+                                                        key={i}
+                                                        className="grid grid-cols-3 text-gray-700 text-sm border-b py-1 text-center"
+                                                    >
+                                                        <span>{s.name}</span>
+                                                        <span>${s.price.toFixed(2)}</span>
+                                                        <span>{s.duration} min</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+
+                                    </div>
+                                )}
+                            </>
+
                         )}
 
                         {!editingProfile && (
@@ -254,6 +425,7 @@ const BusinessDashboard = () => {
                                         setNameInput(businessInfo?.name || "");
                                         setBusinessNameInput(businessInfo?.businessName || "");
                                         setPhoneInput(businessInfo?.phone || "");
+                                        setDescriptionInput(businessInfo?.description || "");
                                     }}
                                     className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                                 >

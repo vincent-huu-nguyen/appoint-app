@@ -50,33 +50,34 @@ const CustomerDashboard = () => {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Customer Dashboard</h1>
+        <div>
+          {!viewingAppointments && (
+            <button
+              onClick={async () => {
+                await fetchAppointments();
+                setViewingAppointments(true);
+              }}
+              className="bg-gray-800 text-white px-4 py-2 rounded"
+            >
+              View My Appointments
+            </button>
+          )}
+          {viewingAppointments && (
+            <button
+              onClick={() => setViewingAppointments(false)}
+              className="bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Book an Appointment
+            </button>
+          )}
 
-        <button
-          onClick={handleLogout}
-          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-        >
-          Logout
-        </button>
-
-        {!viewingAppointments && (
           <button
-            onClick={async () => {
-              await fetchAppointments();
-              setViewingAppointments(true);
-            }}
-            className="bg-gray-800 text-white px-4 py-2 rounded"
+            onClick={handleLogout}
+            className="bg-red-600 text-white px-4 py-2 ml-2 rounded hover:bg-red-700"
           >
-            View My Appointments
+            Logout
           </button>
-        )}
-        {viewingAppointments && (
-          <button
-            onClick={() => setViewingAppointments(false)}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Book an Appointment
-          </button>
-        )}
+        </div>
       </div>
 
       {viewingAppointments ? (
