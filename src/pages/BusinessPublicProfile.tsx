@@ -17,7 +17,25 @@ const BusinessPublicProfile = () => {
   const user = auth.currentUser;
   const [selectedService, setSelectedService] = useState("");
   const [bookedTimes, setBookedTimes] = useState<{ time: string; duration: number }[]>([]);
+  const [error, setError] = useState<string>("");
+  const [note, setNote] = useState("");
 
+  const formatDateLocal = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`; // e.g. "2025-08-12"
+  };
+
+  const isSameLocalDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const roundUpToMinutes = (d: Date, minutes: number) => {
+    const ms = minutes * 60 * 1000;
+    return new Date(Math.ceil(d.getTime() / ms) * ms);
+  };
 
   useEffect(() => {
     const fetchBusiness = async () => {
@@ -37,7 +55,7 @@ const BusinessPublicProfile = () => {
     const fetchBookedTimes = async () => {
       if (!selectedDate || !id) return;
 
-      const dateStr = selectedDate.toISOString().split("T")[0];
+      const dateStr = formatDateLocal(selectedDate);
       const q = query(
         collection(db, "appointments"),
         where("businessId", "==", id),
@@ -56,14 +74,24 @@ const BusinessPublicProfile = () => {
     fetchBookedTimes();
   }, [selectedDate, id]);
 
+  useEffect(() => {
+    setError("");
+  }, [selectedService, selectedDate, selectedTime]);
+
+
   const handleBook = async () => {
     if (!user || !selectedDate || !selectedTime || !business || !selectedService) {
-      alert("Please complete all fields.");
+      setError("Please select a service, date, and time before booking.");
       return;
     }
 
     const service = business.services.find((s: any) => s.name === selectedService);
-    if (!service) return;
+    if (!service) {
+      setError("Please choose a valid service.");
+      return;
+    }
+
+    setError(""); // clear error before booking
 
     const appointmentId = uuidv4();
     await setDoc(doc(db, "appointments", appointmentId), {
@@ -73,8 +101,9 @@ const BusinessPublicProfile = () => {
       businessPhone: business.phone,
       service: selectedService,
       duration: service.duration,
-      date: selectedDate.toISOString().split("T")[0],
+      date: formatDateLocal(selectedDate),
       time: selectedTime,
+      note: note.trim() || null, // null if empty
     });
 
     alert("Appointment booked!");
@@ -82,62 +111,80 @@ const BusinessPublicProfile = () => {
   };
 
 
+
   if (loading) return <p className="text-center mt-10">Loading...</p>;
   if (!business) return <p className="text-center mt-10 text-red-600">Business not found.</p>;
 
   const generateTimeSlots = () => {
-    if (!selectedService) return [];
+    if (!selectedService || !selectedDate) return [];
 
     const service = business.services.find((s: any) => s.name === selectedService);
     if (!service) return [];
 
-    const duration = service.duration; // in minutes
+    const duration = service.duration; // minutes
     const slots: string[] = [];
 
-    const start = new Date();
-    start.setHours(8, 0, 0, 0); // 8:00 AM
-    const end = new Date();
-    end.setHours(18, 0, 0, 0); // 6:00 PM
+    // Anchor the window to the SELECTED DATE (not "today")
+    const start = new Date(selectedDate);
+    start.setHours(8, 0, 0, 0); // 8:00 AM of selected day
 
-    while (start <= end) {
-      const slotTime = start.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
+    const end = new Date(selectedDate);
+    end.setHours(18, 0, 0, 0); // 6:00 PM of selected day
 
-      const slotStart = new Date(start);
-      const slotEnd = new Date(start);
+    // If booking for TODAY, do not show times in the past
+    const now = new Date();
+    if (isSameLocalDay(selectedDate, now)) {
+      const minStart = roundUpToMinutes(now, 15); // round up to next 15-min interval
+      if (minStart > start) start.setTime(minStart.getTime());
+    }
+
+    // Build slots every 15 minutes
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const slotStart = new Date(cursor);
+      const slotEnd = new Date(cursor);
       slotEnd.setMinutes(slotEnd.getMinutes() + duration);
 
+      // Skip if (still) in the past (covers edge where duration pushes it behind now)
+      if (isSameLocalDay(selectedDate, now) && slotEnd <= now) {
+        cursor.setMinutes(cursor.getMinutes() + 15);
+        continue;
+      }
+
+      // Check overlap with existing bookings
       const overlaps = bookedTimes.some((booked) => {
         const [hour, min, meridian] = booked.time.split(/[:\s]/);
-        const bookedStart = new Date(selectedDate!);
+        const bookedStart = new Date(selectedDate);
         bookedStart.setHours(
-          meridian === "PM" && hour !== "12" ? parseInt(hour) + 12 : parseInt(hour),
+          meridian?.toUpperCase() === "PM" && hour !== "12" ? parseInt(hour) + 12 : parseInt(hour),
           parseInt(min)
         );
-
         const bookedEnd = new Date(bookedStart);
-        bookedEnd.setMinutes(bookedEnd.getMinutes() + booked.duration);
+        bookedEnd.setMinutes(bookedEnd.getMinutes() + (booked.duration || 30));
 
         return (
           (slotStart >= bookedStart && slotStart < bookedEnd) ||
           (slotEnd > bookedStart && slotEnd <= bookedEnd) ||
-          (slotStart <= bookedStart && slotEnd >= bookedEnd) // full overlap
+          (slotStart <= bookedStart && slotEnd >= bookedEnd)
         );
       });
 
-
       if (!overlaps) {
-        slots.push(slotTime);
+        slots.push(
+          slotStart.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          })
+        );
       }
 
-      start.setMinutes(start.getMinutes() + 15);
+      cursor.setMinutes(cursor.getMinutes() + 15);
     }
 
     return slots;
   };
+
 
 
 
@@ -237,12 +284,27 @@ const BusinessPublicProfile = () => {
             </div>
           )}
 
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Add a note for the business (optional)"
+            className="border p-2 rounded w-full mt-4 resize-none"
+            rows={3}
+          />
+
           <button
             onClick={handleBook}
             className="bg-blue-600 text-white mt-6 px-4 py-2 rounded hover:bg-blue-700 transition w-full"
           >
             Book Appointment
           </button>
+
+          {error && (
+            <p className="mt-2 text-sm text-red-600" role="alert" aria-live="polite">
+              {error}
+            </p>
+          )}
+
         </div>
 
       </div>

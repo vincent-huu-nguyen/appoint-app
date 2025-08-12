@@ -7,6 +7,7 @@ import {
     doc,
     getDoc,
     setDoc,
+    deleteDoc,
 } from "firebase/firestore";
 import { auth, db, storage } from "../firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -41,6 +42,11 @@ const BusinessDashboard = () => {
         price: 0,
         duration: 0,
     });
+    const toLocalDate = (yyyymmdd: string) => {
+        const [y, m, d] = yyyymmdd.split("-").map(Number);
+        return new Date(y, m - 1, d); // local midnight
+    };
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
 
     const formatPhoneNumber = (phone: string) => {
@@ -121,6 +127,20 @@ const BusinessDashboard = () => {
         setEditingApptId(null);
     };
 
+    const handleDeleteAppointment = async (id: string) => {
+        if (!user) return;
+        const yes = window.confirm("Delete this appointment? This cannot be undone.");
+        if (!yes) return;
+
+        try {
+            setDeletingId(id);
+            await deleteDoc(doc(db, "appointments", id));
+            // Optimistically update UI
+            setAppointments(prev => prev.filter(a => a.id !== id));
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     const handleSaveProfile = async () => {
         if (!user) return;
@@ -487,22 +507,23 @@ const BusinessDashboard = () => {
                                     ) : (
                                         <>
                                             <p>
-                                                Date:{" "}
-                                                {new Date(appt.date).toLocaleDateString("en-US", {
+                                                Date: {toLocalDate(appt.date).toLocaleDateString("en-US", {
                                                     weekday: "long",
                                                     year: "numeric",
                                                     month: "2-digit",
                                                     day: "2-digit",
                                                 })}
+
                                             </p>
-                                            <p>
-                                                Time:{" "}
-                                                {new Date(`1970-01-01T${appt.time}`).toLocaleTimeString("en-US", {
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                    hour12: true,
-                                                })}
-                                            </p>
+                                            <p>Time: {appt.time}</p>
+
+                                            {typeof appt.note === "string" && appt.note.trim() !== "" && (
+                                                <p className="mt-2 text-gray-700">
+                                                    <span className="font-semibold">Note:</span>{" "}
+                                                    <span className="whitespace-pre-wrap">{appt.note}</span>
+                                                </p>
+                                            )}
+
                                             <button
                                                 onClick={() => {
                                                     setEditingApptId(appt.id);
@@ -513,6 +534,15 @@ const BusinessDashboard = () => {
                                             >
                                                 Edit
                                             </button>
+                                            <button
+                                                onClick={() => handleDeleteAppointment(appt.id)}
+                                                disabled={deletingId === appt.id}
+                                                className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                                                    }`}
+                                            >
+                                                {deletingId === appt.id ? "Deleting..." : "Delete"}
+                                            </button>
+
                                         </>
                                     )}
                                 </li>

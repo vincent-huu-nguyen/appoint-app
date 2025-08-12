@@ -18,6 +18,11 @@ const CustomerDashboard = () => {
     }, 50); // short delay to avoid race condition
   };
 
+  const toLocalDate = (yyyymmdd: string) => {
+    const [y, m, d] = yyyymmdd.split("-").map(Number);
+    return new Date(y, m - 1, d); // local midnight
+  };
+
 
   const user = auth.currentUser;
 
@@ -50,7 +55,7 @@ const CustomerDashboard = () => {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Customer Dashboard</h1>
-        <div>
+        <div className="flex">
           {!viewingAppointments && (
             <button
               onClick={async () => {
@@ -91,15 +96,16 @@ const CustomerDashboard = () => {
                   <p className="font-bold">{appt.businessName}</p>
                   <p className="font-semibold">Phone Number: {appt.businessPhone}</p>
                   <p>
-                    Date:{" "}
-                    {new Date(appt.date).toLocaleDateString("en-US", {
-                      weekday: "long",    // e.g., Monday
+                    Date: {toLocalDate(appt.date).toLocaleDateString("en-US", {
+                      weekday: "long",
                       year: "numeric",
                       month: "2-digit",
                       day: "2-digit",
                     })}
+
                   </p>
-                  <p>Time: {new Date(`1970-01-01T${appt.time}:00`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                  <p>Time: {appt.time}</p>
+                  <p className="text-sm text-gray-500 pt-4">To cancel an appointment, please call the business number.</p>
                 </li>
               ))}
             </ul>
