@@ -263,20 +263,20 @@ const BusinessDashboard = () => {
                 <h1 className="text-2xl font-semibold">
                     {showProfile ? "Your Profile" : "Your Appointments"}
                 </h1>
-                <div>
-                    <button
-                        onClick={() => setShowProfile((prev) => !prev)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                        {showProfile ? "View Your Appointments" : "View My Profile"}
-                    </button>
-                    <button
-                        onClick={handleLogout}
-                        className="bg-red-600 text-white px-4 py-2 ml-2 rounded hover:bg-red-700"
-                    >
-                        Logout
-                    </button>
-                </div>
+                    <div className="flex">
+                        <button
+                            onClick={() => setShowProfile((prev) => !prev)}
+                            className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900"
+                        >
+                            {showProfile ? "View Your Appointments" : "View My Profile"}
+                        </button>
+                        <button
+                            onClick={handleLogout}
+                            className="bg-gray-800 text-white px-4 py-2 ml-2 rounded hover:bg-gray-900"
+                        >
+                            Logout
+                        </button>
+                    </div>
             </div>
 
             {showProfile ? (
@@ -443,7 +443,7 @@ const BusinessDashboard = () => {
                                             setNewServicePrice("");
                                             setNewServiceDuration("");
                                         }}
-                                        className="mt-2 bg-blue-600 text-white px-3 py-1 rounded"
+                                        className="mt-2 bg-gray-700 hover:bg-gray-800 text-white px-3 py-1 rounded"
                                     >
                                         Add Service
                                     </button>
@@ -452,13 +452,13 @@ const BusinessDashboard = () => {
                                 <div className="flex gap-4 justify-center">
                                     <button
                                         onClick={handleSaveProfile}
-                                        className="bg-green-600 text-white px-4 py-2 rounded"
+                                        className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded"
                                     >
                                         Save
                                     </button>
                                     <button
                                         onClick={() => setEditingProfile(false)}
-                                        className="bg-gray-400 text-white px-4 py-2 rounded"
+                                        className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
                                     >
                                         Cancel
                                     </button>
@@ -522,7 +522,7 @@ const BusinessDashboard = () => {
                                         setPhoneInput(businessInfo?.phone || "");
                                         setDescriptionInput(businessInfo?.description || "");
                                     }}
-                                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                    className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800"
                                 >
                                     Edit Profile
                                 </button>
@@ -532,7 +532,7 @@ const BusinessDashboard = () => {
                             <div className="mt-4">
                                 <button
                                     onClick={() => setShowDeleteConfirm(true)}
-                                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                    className="bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800"
                                 >
                                     Delete Account
                                 </button>
@@ -616,13 +616,13 @@ const BusinessDashboard = () => {
                                             <div className="flex gap-2 mt-2">
                                                 <button
                                                     onClick={() => handleUpdateAppointment(appt.id)}
-                                                    className="bg-green-600 text-white px-3 py-1 rounded"
+                                                    className="bg-gray-800 hover:bg-gray-900 text-white px-3 py-1 rounded"
                                                 >
                                                     Save
                                                 </button>
                                                 <button
                                                     onClick={() => setEditingApptId(null)}
-                                                    className="bg-gray-500 text-white px-3 py-1 rounded"
+                                                    className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded"
                                                 >
                                                     Cancel
                                                 </button>
@@ -654,14 +654,14 @@ const BusinessDashboard = () => {
                                                     setEditedDate(appt.date);
                                                     setEditedTime(appt.time);
                                                 }}
-                                                className="mt-2 bg-blue-600 text-white px-3 py-1 rounded"
+                                                className="mt-2 bg-gray-800 hover:bg-gray-900 text-white px-3 py-1 rounded"
                                             >
                                                 Edit
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteAppointment(appt.id)}
                                                 disabled={deletingId === appt.id}
-                                                className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                                                className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id ? "bg-gray-800 cursor-not-allowed" : "bg-gray-800 hover:bg-red-900"
                                                     }`}
                                             >
                                                 {deletingId === appt.id ? "Deleting..." : "Delete"}
