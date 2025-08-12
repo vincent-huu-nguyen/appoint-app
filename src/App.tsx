@@ -8,6 +8,8 @@ import CustomerProfile from "./pages/CustomerProfile";
 import BusinessProfile from "./pages/BusinessProfile";
 import BusinessPublicProfile from "./pages/BusinessPublicProfile";
 import BusinessDashboard from "./pages/BusinessDashboard";
+import "react-datepicker/dist/react-datepicker.css";
+
 
 function App() {
   return (

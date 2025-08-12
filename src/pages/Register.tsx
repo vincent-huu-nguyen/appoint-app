@@ -62,83 +62,85 @@ const Register = () => {
 
 
     return (
-        <div className="max-w-md mx-auto mt-10 space-y-4">
-            <h2 className="text-xl font-semibold text-center">Register</h2>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 text-center px-4">
+            <div className="max-w-md mx-auto space-y-4">
+                <h2 className="text-xl font-semibold text-center">Register</h2>
 
-            {step === "email" ? (
-                <form onSubmit={handleEmailSubmit} className="space-y-4">
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Email"
-                        className="border p-2 w-full"
-                        required
-                    />
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Password"
-                        className="border p-2 w-full"
-                        required
-                    />
-                    <div className="flex gap-4">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setRole("admin");
-                                setStep("details");
-                            }}
-                            className="bg-purple-600 text-white px-4 py-2 rounded w-full"
-                        >
-                            Register as Business
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setRole("customer");
-                                setStep("details");
-                            }}
-                            className="bg-green-600 text-white px-4 py-2 rounded w-full"
-                        >
-                            Register as Customer
-                        </button>
-                    </div>
-                </form>
-            ) : (
-                <form onSubmit={handleFinalSubmit} className="space-y-4">
-                    <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Your Name"
-                        className="border p-2 w-full"
-                        required
-                    />
-                    {role === "admin" && (
+                {step === "email" ? (
+                    <form onSubmit={handleEmailSubmit} className="space-y-4">
                         <input
-                            type="text"
-                            value={businessName}
-                            onChange={(e) => setBusinessName(e.target.value)}
-                            placeholder="Business Name"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="Email"
                             className="border p-2 w-full"
                             required
                         />
-                    )}
-                    <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-                        placeholder="Phone Number"
-                        className="border p-2 w-full"
-                        required
-                    />
-                    <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded w-full">
-                        Complete Registration
-                    </button>
-                </form>
-            )}
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Password"
+                            className="border p-2 w-full"
+                            required
+                        />
+                        <div className="flex gap-4">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setRole("admin");
+                                    setStep("details");
+                                }}
+                                className="bg-purple-600 text-white px-4 py-2 rounded w-full hover:bg-purple-700 transition"
+                            >
+                                Register as Business
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setRole("customer");
+                                    setStep("details");
+                                }}
+                                className="bg-green-600 text-white px-4 py-2 rounded w-full hover:bg-green-700 transition"
+                            >
+                                Register as Customer
+                            </button>
+                        </div>
+                    </form>
+                ) : (
+                    <form onSubmit={handleFinalSubmit} className="space-y-4">
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Your Name"
+                            className="border p-2 w-full"
+                            required
+                        />
+                        {role === "admin" && (
+                            <input
+                                type="text"
+                                value={businessName}
+                                onChange={(e) => setBusinessName(e.target.value)}
+                                placeholder="Business Name"
+                                className="border p-2 w-full"
+                                required
+                            />
+                        )}
+                        <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
+                            placeholder="Phone Number"
+                            className="border p-2 w-full"
+                            required
+                        />
+                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded w-full">
+                            Complete Registration
+                        </button>
+                    </form>
+                )}
+            </div>
         </div>
     );
 };
