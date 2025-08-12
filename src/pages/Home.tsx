@@ -8,13 +8,13 @@ const Home = () => {
       <div className="flex gap-4">
         <Link
           to="/login"
-          className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition"
+          className="bg-gray-800 text-white px-6 py-2 rounded hover:bg-gray-900 transition"
         >
           Login
         </Link>
         <Link
           to="/register"
-          className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 transition"
+          className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 transition"
         >
           Register
         </Link>

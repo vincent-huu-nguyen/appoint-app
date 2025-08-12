@@ -193,7 +193,7 @@ const BusinessPublicProfile = () => {
       <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md text-center border">
         <button
           onClick={() => navigate(-1)}
-          className="text-blue-600 hover:underline mb-4 text-sm flex items-center"
+          className="flex text-xs px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition"
         >
           ← Back
         </button>
@@ -294,7 +294,7 @@ const BusinessPublicProfile = () => {
 
           <button
             onClick={handleBook}
-            className="bg-blue-600 text-white mt-6 px-4 py-2 rounded hover:bg-blue-700 transition w-full"
+            className="bg-indigo-600 text-white mt-6 px-4 py-2 rounded hover:bg-indigo-700 transition w-full"
           >
             Book Appointment
           </button>

@@ -18,11 +18,35 @@ const CustomerDashboard = () => {
     }, 50); // short delay to avoid race condition
   };
 
+  // ---- helpers ----
   const toLocalDate = (yyyymmdd: string) => {
     const [y, m, d] = yyyymmdd.split("-").map(Number);
     return new Date(y, m - 1, d); // local midnight
   };
 
+  const parseMinutes = (t: string) => {
+    // supports "h:mm AM/PM" or "HH:mm"
+    const m12 = t?.match?.(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (m12) {
+      let h = parseInt(m12[1], 10);
+      const m = parseInt(m12[2], 10);
+      const ampm = m12[3].toUpperCase();
+      if (ampm === "PM" && h !== 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      return h * 60 + m;
+    }
+    const m24 = t?.match?.(/^(\d{1,2}):(\d{2})$/);
+    if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+    return 0;
+  };
+
+  const apptTimestamp = (a: { date: string; time: string }) => {
+    const [y, m, d] = a.date.split("-").map(Number);
+    const minutes = parseMinutes(a.time);
+    const base = new Date(y, m - 1, d);
+    base.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    return base.getTime();
+  };
 
   const user = auth.currentUser;
 
@@ -34,12 +58,13 @@ const CustomerDashboard = () => {
     setResults(data);
   };
 
-  // Fetch user's appointments
+  // Fetch user's appointments (then sort soon → later)
   const fetchAppointments = async () => {
     if (!user) return;
     const q = query(collection(db, "appointments"), where("customerId", "==", user.uid));
     const snapshot = await getDocs(q);
-    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
+    data.sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
     setAppointments(data);
   };
 
@@ -48,7 +73,7 @@ const CustomerDashboard = () => {
   }, [viewingAppointments]);
 
   const filtered = results.filter((biz) =>
-    biz.businessName.toLowerCase().includes(search.toLowerCase())
+    (biz.businessName || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -62,7 +87,7 @@ const CustomerDashboard = () => {
                 await fetchAppointments();
                 setViewingAppointments(true);
               }}
-              className="bg-gray-800 text-white px-4 py-2 rounded"
+              className="bg-indigo-800 hover:bg-indigo-900 text-white px-4 py-2 rounded"
             >
               View My Appointments
             </button>
@@ -70,7 +95,7 @@ const CustomerDashboard = () => {
           {viewingAppointments && (
             <button
               onClick={() => setViewingAppointments(false)}
-              className="bg-blue-600 text-white px-4 py-2 rounded"
+              className="bg-indigo-800 hover:bg-indigo-900 text-white px-4 py-2 rounded"
             >
               Book an Appointment
             </button>
@@ -78,7 +103,7 @@ const CustomerDashboard = () => {
 
           <button
             onClick={handleLogout}
-            className="bg-red-600 text-white px-4 py-2 ml-2 rounded hover:bg-red-700"
+            className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 ml-2 rounded"
           >
             Logout
           </button>
@@ -96,16 +121,18 @@ const CustomerDashboard = () => {
                   <p className="font-bold">{appt.businessName}</p>
                   <p className="font-semibold">Phone Number: {appt.businessPhone}</p>
                   <p>
-                    Date: {toLocalDate(appt.date).toLocaleDateString("en-US", {
+                    Date:{" "}
+                    {toLocalDate(appt.date).toLocaleDateString("en-US", {
                       weekday: "long",
                       year: "numeric",
                       month: "2-digit",
                       day: "2-digit",
                     })}
-
                   </p>
                   <p>Time: {appt.time}</p>
-                  <p className="text-sm text-gray-500 pt-4">To reschedule or cancel an appointment, please call the business.</p>
+                  <p className="text-sm text-gray-500 pt-4">
+                    To reschedule or cancel an appointment, please call the business.
+                  </p>
                 </li>
               ))}
             </ul>
@@ -134,7 +161,6 @@ const CustomerDashboard = () => {
               </li>
             ))}
           </ul>
-
         </>
       )}
     </div>
