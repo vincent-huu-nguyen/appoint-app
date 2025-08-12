@@ -10,8 +10,8 @@ import {
     deleteDoc,
 } from "firebase/firestore";
 import { auth, db, storage } from "../firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { signOut } from "firebase/auth";
+import { ref as storageRef, deleteObject, listAll, uploadBytes, getDownloadURL } from "firebase/storage";
+import { signOut, deleteUser, reauthenticateWithCredential, EmailAuthProvider, reauthenticateWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import profilePlaceholder from "../assets/profilePlaceholder.png";
 
@@ -47,6 +47,9 @@ const BusinessDashboard = () => {
         return new Date(y, m - 1, d); // local midnight
     };
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deletingAccount, setDeletingAccount] = useState(false);
+    const [confirmText, setConfirmText] = useState("");
 
 
     const formatPhoneNumber = (phone: string) => {
@@ -165,7 +168,7 @@ const BusinessDashboard = () => {
     const handleImageUpload = async () => {
         if (!user || !imageUpload) return;
         setUploading(true);
-        const imageRef = ref(storage, `profilePictures/${user.uid}`);
+        const imageRef = storageRef(storage, `profilePictures/${user.uid}`);
         await uploadBytes(imageRef, imageUpload);
         const url = await getDownloadURL(imageRef);
         await setDoc(doc(db, "users", user.uid), { profilePicture: url }, { merge: true });
@@ -174,6 +177,78 @@ const BusinessDashboard = () => {
         setImageUpload(null);
         setUploading(false);
     };
+
+    const handleDeleteAccount = async () => {
+        if (!user) return;
+
+        try {
+            setDeletingAccount(true);
+
+            // 1) Delete all appointments for this business
+            const apptSnap = await getDocs(
+                query(collection(db, "appointments"), where("businessId", "==", user.uid))
+            );
+            // Firestore doesn’t support client multi-document delete in one atomic op.
+            // Do them in parallel (small sets) or batch in chunks.
+            await Promise.all(
+                apptSnap.docs.map((d) => deleteDoc(doc(db, "appointments", d.id)))
+            );
+
+            // 2) Delete Storage assets (profile picture folder)
+            // If you only store one picture at profilePictures/{uid}, just delete that object.
+            // If you might have multiple, list and delete all.
+            try {
+                const folderRef = storageRef(storage, `profilePictures/${user.uid}`);
+                // if it's a single file named by uid, delete directly:
+                await deleteObject(folderRef);
+            } catch (_) {
+                // If you sometimes store multiple files under a folder, use listAll:
+                try {
+                    const dirRef = storageRef(storage, `profilePictures/${user.uid}/`);
+                    const listed = await listAll(dirRef);
+                    await Promise.all(listed.items.map((item) => deleteObject(item)));
+                } catch (__) { /* ignore if none */ }
+            }
+
+            // 3) Delete Firestore user doc
+            await deleteDoc(doc(db, "users", user.uid));
+
+            // 4) Delete the Auth user (may require recent login)
+            try {
+                await deleteUser(user);
+            } catch (err: any) {
+                if (err?.code === "auth/requires-recent-login") {
+                    // Reauthenticate then delete
+                    // If email/password account:
+                    const providerId = user.providerData[0]?.providerId;
+                    if (providerId === "password") {
+                        const email = user.email || "";
+                        const password = window.prompt("For security, please re-enter your password to delete your account:") || "";
+                        if (!password) throw err;
+                        const cred = EmailAuthProvider.credential(email, password);
+                        await reauthenticateWithCredential(user, cred);
+                    } else {
+                        // For Google, Github, etc. — example with Google:
+                        await reauthenticateWithPopup(user, new GoogleAuthProvider());
+                    }
+                    await deleteUser(user); // retry
+                } else {
+                    throw err;
+                }
+            }
+
+            // 5) Sign out and redirect
+            await signOut(auth);
+            navigate("/");
+
+        } catch (e) {
+            console.error(e);
+            alert("Sorry—account deletion failed. Please try again.");
+        } finally {
+            setDeletingAccount(false);
+        }
+    };
+
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -453,6 +528,55 @@ const BusinessDashboard = () => {
                                 </button>
                             </div>
                         )}
+                        {!editingProfile && (
+                            <div className="mt-4">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                >
+                                    Delete Account
+                                </button>
+                            </div>
+                        )}
+                        {showDeleteConfirm && (
+                            <div className="mt-3 p-3 border rounded bg-red-50 text-left">
+                                <p className="text-sm text-red-800">
+                                    This will permanently delete your profile, your profile picture, and all of your appointments.
+                                    Type <span className="font-semibold">{businessInfo?.businessName || "DELETE"}</span> to confirm.
+                                </p>
+                                <input
+                                    type="text"
+                                    value={confirmText}
+                                    onChange={(e) => setConfirmText(e.target.value)}
+                                    className="mt-2 w-full border p-2 rounded"
+                                    placeholder={`Type "${businessInfo?.businessName || "DELETE"}"`}
+                                />
+                                <div className="mt-2 flex gap-2">
+                                    <button
+                                        onClick={handleDeleteAccount}
+                                        disabled={
+                                            deletingAccount ||
+                                            (businessInfo?.businessName
+                                                ? confirmText !== businessInfo.businessName
+                                                : confirmText !== "DELETE")
+                                        }
+                                        className={`px-3 py-1 rounded text-white ${deletingAccount
+                                            ? "bg-red-400 cursor-not-allowed"
+                                            : "bg-red-600 hover:bg-red-700"
+                                            }`}
+                                    >
+                                        {deletingAccount ? "Deleting…" : "Confirm Delete"}
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowDeleteConfirm(false); setConfirmText(""); }}
+                                        className="px-3 py-1 rounded bg-gray-200"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                     </div>
                 </div>
             ) : (

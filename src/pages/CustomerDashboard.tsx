@@ -105,7 +105,7 @@ const CustomerDashboard = () => {
 
                   </p>
                   <p>Time: {appt.time}</p>
-                  <p className="text-sm text-gray-500 pt-4">To cancel an appointment, please call the business number.</p>
+                  <p className="text-sm text-gray-500 pt-4">To reschedule or cancel an appointment, please call the business.</p>
                 </li>
               ))}
             </ul>
