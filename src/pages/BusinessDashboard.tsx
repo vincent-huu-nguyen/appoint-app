@@ -47,6 +47,14 @@ type Appt = {
     active?: boolean;
 };
 
+type Service = {
+    name: string;
+    price: number;
+    duration: number;
+    /** If true, display price as "$X.XX+" (starting at) */
+    pricePlus?: boolean;
+};
+
 const toLocalDate = (yyyymmdd: string) => {
     const [y, m, d] = yyyymmdd.split("-").map(Number);
     return new Date(y, m - 1, d); // local midnight
@@ -99,16 +107,19 @@ const BusinessDashboard = () => {
     const [phoneInput, setPhoneInput] = useState("");
     const [descriptionInput, setDescriptionInput] = useState("");
 
-    const [services, setServices] = useState<{ name: string; price: number; duration: number }[]>(
-        []
-    );
+    const [services, setServices] = useState<Service[]>([]);
     const [newServiceName, setNewServiceName] = useState("");
     const [newServicePrice, setNewServicePrice] = useState("");
     const [newServiceDuration, setNewServiceDuration] = useState("");
+    const [newServicePlus, setNewServicePlus] = useState(false);
+
     const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
-    const [editedService, setEditedService] = useState<{ name: string; price: number; duration: number }>(
-        { name: "", price: 0, duration: 0 }
-    );
+    const [editedService, setEditedService] = useState<Service>({
+        name: "",
+        price: 0,
+        duration: 0,
+        pricePlus: false,
+    });
 
     const [imageUpload, setImageUpload] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -156,9 +167,15 @@ const BusinessDashboard = () => {
             const ref = doc(db, "users", user.uid);
             const snap = await getDoc(ref);
             if (snap.exists()) {
-                const data = snap.data();
+                const data = snap.data() as any;
                 setBusinessInfo(data);
-                setServices((data as any).services || []);
+                const svcs: Service[] = (data.services || []).map((s: any) => ({
+                    name: s.name,
+                    price: s.price,
+                    duration: s.duration,
+                    pricePlus: !!s.pricePlus,
+                }));
+                setServices(svcs);
             }
         };
 
@@ -221,7 +238,7 @@ const BusinessDashboard = () => {
                 role: "admin",
                 email: businessInfo?.email,
                 description: descriptionInput,
-                services,
+                services, // includes pricePlus
             },
             { merge: true }
         );
@@ -396,8 +413,10 @@ const BusinessDashboard = () => {
                                     onChange={(e) => setDescriptionInput(e.target.value)}
                                     className="border p-2 w-full rounded h-24 resize-none"
                                 />
+
                                 <div className="space-y-2 text-left">
                                     <h3 className="text-lg font-semibold">Services</h3>
+
                                     {services.map((service, idx) => (
                                         <div key={idx} className="flex gap-2 text-sm items-center">
                                             {editingServiceIndex === idx ? (
@@ -408,18 +427,20 @@ const BusinessDashboard = () => {
                                                         onChange={(e) =>
                                                             setEditedService({ ...editedService, name: e.target.value })
                                                         }
-                                                        className="border p-1 rounded w-1/3"
+                                                        className="border p-1 rounded w-1/4"
+                                                        placeholder="Name"
                                                     />
                                                     <input
                                                         type="number"
-                                                        value={editedService.price}
+                                                        value={Number.isFinite(editedService.price) ? editedService.price : 0}
                                                         onChange={(e) =>
                                                             setEditedService({
                                                                 ...editedService,
                                                                 price: parseFloat(e.target.value || "0"),
                                                             })
                                                         }
-                                                        className="border p-1 rounded w-1/3"
+                                                        className="border p-1 rounded w-1/4"
+                                                        placeholder="Price"
                                                     />
                                                     <input
                                                         type="number"
@@ -430,8 +451,23 @@ const BusinessDashboard = () => {
                                                                 duration: parseInt(e.target.value || "0", 10),
                                                             })
                                                         }
-                                                        className="border p-1 rounded w-1/3"
+                                                        className="border p-1 rounded w-1/4"
+                                                        placeholder="Duration"
                                                     />
+                                                    <label className="inline-flex items-center gap-1 w-1/4">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={!!editedService.pricePlus}
+                                                            onChange={(e) =>
+                                                                setEditedService({
+                                                                    ...editedService,
+                                                                    pricePlus: e.target.checked,
+                                                                })
+                                                            }
+                                                        />
+                                                        <span className="text-xs">Show as “starting at” (+)</span>
+                                                    </label>
+
                                                     <button
                                                         className="text-green-600 text-xs font-medium"
                                                         onClick={() => {
@@ -452,9 +488,12 @@ const BusinessDashboard = () => {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <span className="w-1/3">{service.name}</span>
-                                                    <span className="w-1/3">${service.price.toFixed(2)}</span>
-                                                    <span className="w-1/3">{service.duration} min</span>
+                                                    <span className="w-1/4">{service.name}</span>
+                                                    <span className="w-1/4">
+                                                        ${service.price.toFixed(2)}
+                                                        {service.pricePlus ? "+" : ""}
+                                                    </span>
+                                                    <span className="w-1/4">{service.duration} min</span>
                                                     <button
                                                         className="text-blue-600 text-xs font-medium"
                                                         onClick={() => {
@@ -478,31 +517,44 @@ const BusinessDashboard = () => {
                                         </div>
                                     ))}
 
-                                    <div className="flex gap-2 mt-2">
+                                    <div className="flex justify-between flex-wrap gap-2 mt-2 items-center">
                                         <input
                                             type="text"
                                             placeholder="Service Name"
                                             value={newServiceName}
                                             onChange={(e) => setNewServiceName(e.target.value)}
-                                            className="text-sm border p-2 rounded w-1/3"
+                                            className="text-sm border p-2 rounded w-1/3 min-w-[140px]"
                                         />
-                                        <p className="py-2 pl-2">$</p>
-                                        <input
-                                            type="number"
-                                            placeholder="Price"
-                                            value={newServicePrice}
-                                            onChange={(e) => setNewServicePrice(e.target.value)}
-                                            className="text-sm border p-2 rounded w-1/3"
-                                        />
-                                        <input
-                                            type="number"
-                                            placeholder="Duration (min)"
-                                            value={newServiceDuration}
-                                            onChange={(e) => setNewServiceDuration(e.target.value)}
-                                            className="text-sm border p-2 rounded w-1/3"
-                                        />
-                                        <p className="py-2">min</p>
+                                        <div className="flex">
+                                            <p className="py-2 pr-1">$</p>
+                                            <input
+                                                type="number"
+                                                placeholder="Price"
+                                                value={newServicePrice}
+                                                onChange={(e) => setNewServicePrice(e.target.value)}
+                                                className="text-sm border p-2 rounded w-1/4 min-w-[126px]"
+                                            />
+                                            <label className="inline-flex items-center gap-2 ml-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={newServicePlus}
+                                                onChange={(e) => setNewServicePlus(e.target.checked)}
+                                            />
+                                            <span className="text-xs">Show price as “starting at” (+)</span>
+                                        </label>
+                                        </div>
+                                        <div className="flex">
+                                            <input
+                                                type="number"
+                                                placeholder="Duration (min)"
+                                                value={newServiceDuration}
+                                                onChange={(e) => setNewServiceDuration(e.target.value)}
+                                                className="text-sm border p-2 rounded w-1/4 min-w-[140px]"
+                                            />
+                                            <p className="py-2 pl-1">min</p>
+                                        </div>
                                     </div>
+
                                     <button
                                         onClick={() => {
                                             if (!newServiceName || !newServicePrice || !newServiceDuration) return;
@@ -512,11 +564,13 @@ const BusinessDashboard = () => {
                                                     name: newServiceName,
                                                     price: parseFloat(newServicePrice),
                                                     duration: parseInt(newServiceDuration, 10),
+                                                    pricePlus: newServicePlus,
                                                 },
                                             ]);
                                             setNewServiceName("");
                                             setNewServicePrice("");
                                             setNewServiceDuration("");
+                                            setNewServicePlus(false);
                                         }}
                                         className="mt-2 bg-gray-700 hover:bg-gray-800 text-white px-3 py-1 rounded"
                                     >
@@ -552,7 +606,9 @@ const BusinessDashboard = () => {
                                         <span className="font-bold">Phone:</span>{" "}
                                         {formatPhoneNumber(businessInfo?.phone || "")}
                                     </p>
-                                    <p className="text-gray-600 pt-2">{businessInfo?.description || "N/A"}</p>
+                                    <p className="text-gray-600 pt-2">
+                                        {businessInfo?.description || "N/A"}
+                                    </p>
                                 </div>
 
                                 {services.length > 0 && (
@@ -573,7 +629,10 @@ const BusinessDashboard = () => {
                                                         className="grid grid-cols-3 text-gray-700 text-sm border-b py-1 text-center"
                                                     >
                                                         <span>{s.name}</span>
-                                                        <span>${s.price.toFixed(2)}</span>
+                                                        <span>
+                                                            ${s.price.toFixed(2)}
+                                                            {s.pricePlus ? "+" : ""}
+                                                        </span>
                                                         <span>{s.duration} min</span>
                                                     </li>
                                                 ))}
@@ -617,8 +676,10 @@ const BusinessDashboard = () => {
                                 <p className="text-sm text-red-800">
                                     This will permanently delete your profile, your profile picture, and all of your
                                     appointments. Type{" "}
-                                    <span className="font-semibold">{businessInfo?.businessName || "DELETE"}</span> to
-                                    confirm.
+                                    <span className="font-semibold">
+                                        {businessInfo?.businessName || "DELETE"}
+                                    </span>{" "}
+                                    to confirm.
                                 </p>
                                 <input
                                     type="text"
@@ -636,7 +697,9 @@ const BusinessDashboard = () => {
                                                 ? confirmText !== businessInfo.businessName
                                                 : confirmText !== "DELETE")
                                         }
-                                        className={`px-3 py-1 rounded text-white ${deletingAccount ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                                        className={`px-3 py-1 rounded text-white ${deletingAccount
+                                            ? "bg-red-400 cursor-not-allowed"
+                                            : "bg-red-600 hover:bg-red-700"
                                             }`}
                                     >
                                         {deletingAccount ? "Deleting…" : "Confirm Delete"}
@@ -743,8 +806,8 @@ const BusinessDashboard = () => {
                                                 onClick={() => handleDeleteAppointment(appt.id)}
                                                 disabled={deletingId === appt.id}
                                                 className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id
-                                                        ? "bg-gray-700 cursor-not-allowed"
-                                                        : "bg-gray-700 hover:bg-red-900"
+                                                    ? "bg-gray-700 cursor-not-allowed"
+                                                    : "bg-gray-700 hover:bg-red-900"
                                                     }`}
                                             >
                                                 {deletingId === appt.id ? "Deleting..." : "Delete"}
