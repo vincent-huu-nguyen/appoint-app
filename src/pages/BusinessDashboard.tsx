@@ -484,22 +484,24 @@ const BusinessDashboard = () => {
                                             placeholder="Service Name"
                                             value={newServiceName}
                                             onChange={(e) => setNewServiceName(e.target.value)}
-                                            className="border p-2 rounded w-1/3"
+                                            className="text-sm border p-2 rounded w-1/3"
                                         />
+                                        <p className="py-2 pl-2">$</p>
                                         <input
                                             type="number"
                                             placeholder="Price"
                                             value={newServicePrice}
                                             onChange={(e) => setNewServicePrice(e.target.value)}
-                                            className="border p-2 rounded w-1/3"
+                                            className="text-sm border p-2 rounded w-1/3"
                                         />
                                         <input
                                             type="number"
                                             placeholder="Duration (min)"
                                             value={newServiceDuration}
                                             onChange={(e) => setNewServiceDuration(e.target.value)}
-                                            className="border p-2 rounded w-1/3"
+                                            className="text-sm border p-2 rounded w-1/3"
                                         />
+                                        <p className="py-2">min</p>
                                     </div>
                                     <button
                                         onClick={() => {
