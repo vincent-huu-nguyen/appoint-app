@@ -23,26 +23,44 @@ import {
   roundUpTo,
 } from "../utils/availability";
 
+/* ----------------------------- Helpers ----------------------------- */
+
+const formatPhoneNumber = (phone: string) => {
+  const digits = (phone || "").replace(/\D/g, "");
+  const m = digits.match(/^(\d{3})(\d{3})(\d{4})$/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : phone || "N/A";
+};
+
+const displayPrice = (s: any) =>
+  `$${Number(s?.price ?? 0).toFixed(2)}${s?.pricePlus ? "+" : ""}`;
+
+const isSameLocalDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+/* ----------------------------- Component ----------------------------- */
+
 const BusinessPublicProfile = () => {
   const { id } = useParams();
   const [business, setBusiness] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("");
-  const navigate = useNavigate();
-  const user = auth.currentUser;
+
   const [selectedService, setSelectedService] = useState("");
-  const [bookedTimes, setBookedTimes] = useState<{ time: string; duration: number }[]>([]);
+  const [bookedTimes, setBookedTimes] = useState<
+    { time: string; duration: number }[]
+  >([]);
+
   const [error, setError] = useState<string>("");
   const [note, setNote] = useState("");
 
-  const displayPrice = (s: any) =>
-    `$${Number(s?.price ?? 0).toFixed(2)}${s?.pricePlus ? "+" : ""}`;
+  const navigate = useNavigate();
+  const user = auth.currentUser;
 
-  const isSameLocalDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+  /* ----------------------------- Load business ----------------------------- */
 
   useEffect(() => {
     const fetchBusiness = async () => {
@@ -54,6 +72,8 @@ const BusinessPublicProfile = () => {
     };
     fetchBusiness();
   }, [id]);
+
+  /* ----------------------------- Load bookings (selected day) ----------------------------- */
 
   useEffect(() => {
     const fetchBookedTimes = async () => {
@@ -78,6 +98,8 @@ const BusinessPublicProfile = () => {
   useEffect(() => {
     setError("");
   }, [selectedService, selectedDate, selectedTime]);
+
+  /* ----------------------------- Booking ----------------------------- */
 
   const handleBook = async () => {
     if (!user || !selectedDate || !selectedTime || !business || !selectedService) {
@@ -110,8 +132,7 @@ const BusinessPublicProfile = () => {
     navigate("/appointments");
   };
 
-  if (loading) return <p className="text-center mt-10">Loading...</p>;
-  if (!business) return <p className="text-center mt-10 text-red-600">Business not found.</p>;
+  /* ----------------------------- Timeslot generation (kept logic) ----------------------------- */
 
   const generateTimeSlots = () => {
     if (!selectedService || !selectedDate) return [];
@@ -126,7 +147,7 @@ const BusinessPublicProfile = () => {
     if (availability?.blackoutDates?.includes(dateStr)) return []; // hard closed
 
     const dayIdx = selectedDate.getDay() as DayIndex;
-    // fallback to 08:00–18:00 if no availability configured
+    // fallback window if no availability configured
     const windows = availability?.weekly?.[dayIdx] ?? [{ start: "08:00", end: "18:00" }];
 
     const duration = service.duration;
@@ -154,10 +175,8 @@ const BusinessPublicProfile = () => {
         const slotEnd = new Date(cursor);
         slotEnd.setMinutes(slotEnd.getMinutes() + duration);
 
-        // Ensure slot fits entirely in window
         if (slotEnd > windowEnd) break;
 
-        // booked overlap check
         const overlaps = bookedTimes.some((booked) => {
           const [hour, min, meridian] = booked.time.split(/[:\s]/);
           const bookedStart = new Date(selectedDate);
@@ -200,6 +219,11 @@ const BusinessPublicProfile = () => {
 
   const slots = selectedDate ? generateTimeSlots() : [];
 
+  /* ----------------------------- Render ----------------------------- */
+
+  if (loading) return <p className="text-center mt-10">Loading...</p>;
+  if (!business) return <p className="text-center mt-10 text-red-600">Business not found.</p>;
+
   return (
     <div className="flex justify-center mt-10 mb-10">
       <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md text-center border">
@@ -216,25 +240,43 @@ const BusinessPublicProfile = () => {
           className="w-32 h-32 object-cover rounded-full mx-auto mb-4 bg-gray-200"
         />
 
-        {/* Profile info */}
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">{business.businessName}</h2>
-        <p className="text-gray-600 mb-1">
-          <span className="font-semibold">Owner:</span> {business.name || "N/A"}
-        </p>
-        <p className="text-gray-600 mb-4">
-          <span className="font-semibold">Phone:</span> {business.phone || "N/A"}
-        </p>
-        <p className="text-gray-600 pt-2">{business.description || "N/A"}</p>
+        {/* Profile info — matched layout to BusinessDashboard */}
+        <div className="space-y-2 mt-2 text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-1">
+            {business.businessName}
+          </h2>
 
-        {/* Services */}
+          <p className="text-gray-600">
+            <span className="font-bold">Owner:</span> {business.name || "N/A"}
+          </p>
+
+          <p className="text-gray-600">
+            <span className="font-bold">Phone:</span> {formatPhoneNumber(business.phone)}
+          </p>
+
+          <p className="text-gray-700 pt-2 whitespace-pre-wrap">
+            {business.description || "N/A"}
+          </p>
+
+          {business.availabilityNote && (
+            <div className="mt-4 text-center border-t border-gray-300 pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">Special Notes</h4>
+              <p className="text-gray-700 whitespace-pre-wrap">{business.availabilityNote}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Services — bordered block like dashboard */}
         {business.services && business.services.length > 0 && (
-          <div className="mt-6 text-left">
+          <div className="mt-6 text-left border-t border-b border-gray-300 py-8">
             <h3 className="text-gray-700 font-bold text-center mb-2">Services Offered:</h3>
+
             <div className="grid grid-cols-3 font-semibold text-sm border-b pb-1 mb-2 text-center">
               <span>Service</span>
               <span>Price</span>
               <span>Duration</span>
             </div>
+
             <ul className="space-y-1">
               {business.services.map((s: any, i: number) => (
                 <li
@@ -250,9 +292,11 @@ const BusinessPublicProfile = () => {
           </div>
         )}
 
-        {/* Booking form */}
+        {/* Booking form — kept EXACTLY the same structure/logic */}
         <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-3 text-gray-700 text-center">Book an Appointment</h3>
+          <h3 className="text-lg font-semibold mb-3 text-gray-700 text-center">
+            Book an Appointment
+          </h3>
 
           <select
             value={selectedService}
@@ -285,10 +329,11 @@ const BusinessPublicProfile = () => {
                   <button
                     key={time}
                     onClick={() => setSelectedTime(time)}
-                    className={`min-w-[100px] px-3 py-1 border rounded-full text-sm whitespace-nowrap ${selectedTime === time
+                    className={`min-w-[100px] px-3 py-1 border rounded-full text-sm whitespace-nowrap ${
+                      selectedTime === time
                         ? "bg-blue-600 text-white"
                         : "bg-white text-gray-800 hover:bg-blue-100"
-                      }`}
+                    }`}
                   >
                     {time}
                   </button>

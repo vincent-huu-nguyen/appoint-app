@@ -71,7 +71,7 @@ export default function AvailabilityEditor({ value, onChange }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => addWindow(dayIdx)}
-                                    className="text-xs px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-800"
+                                    className="text-xs px-2 py-1 rounded bg-indigo-800 text-white hover:bg-indigo-900"
                                 >
                                     + Add Window
                                 </button>
@@ -104,7 +104,7 @@ export default function AvailabilityEditor({ value, onChange }: Props) {
                                             <button
                                                 type="button"
                                                 onClick={() => removeWindow(dayIdx, idx)}
-                                                className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 ml-1"
+                                                className="text-xs px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-800 ml-1"
                                             >
                                                 Remove
                                             </button>
