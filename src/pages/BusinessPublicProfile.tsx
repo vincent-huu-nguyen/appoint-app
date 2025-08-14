@@ -1,11 +1,27 @@
+// src/pages/BusinessPublicProfile.tsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc, setDoc, query, collection, where, getDocs, } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  query,
+  collection,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { v4 as uuidv4 } from "uuid";
 import profilePlaceholder from "../assets/profilePlaceholder.png";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import {
+  Availability,
+  DayIndex,
+  formatDateLocal,
+  parseHHMM,
+  roundUpTo,
+} from "../utils/availability";
 
 const BusinessPublicProfile = () => {
   const { id } = useParams();
@@ -20,64 +36,48 @@ const BusinessPublicProfile = () => {
   const [error, setError] = useState<string>("");
   const [note, setNote] = useState("");
 
-  const formatDateLocal = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`; // e.g. "2025-08-12"
-  };
+  const displayPrice = (s: any) =>
+    `$${Number(s?.price ?? 0).toFixed(2)}${s?.pricePlus ? "+" : ""}`;
 
   const isSameLocalDay = (a: Date, b: Date) =>
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate();
 
-  const roundUpToMinutes = (d: Date, minutes: number) => {
-    const ms = minutes * 60 * 1000;
-    return new Date(Math.ceil(d.getTime() / ms) * ms);
-  };
-
   useEffect(() => {
     const fetchBusiness = async () => {
       if (!id) return;
       const ref = doc(db, "users", id);
       const snap = await getDoc(ref);
-      if (snap.exists()) {
-        setBusiness(snap.data());
-      }
+      if (snap.exists()) setBusiness(snap.data());
       setLoading(false);
     };
-
     fetchBusiness();
   }, [id]);
 
   useEffect(() => {
     const fetchBookedTimes = async () => {
       if (!selectedDate || !id) return;
-
       const dateStr = formatDateLocal(selectedDate);
-      const q = query(
+      const qy = query(
         collection(db, "appointments"),
         where("businessId", "==", id),
         where("date", "==", dateStr)
       );
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(qy);
       const times: { time: string; duration: number }[] = [];
       snapshot.forEach((docSnap) => {
         const appt = docSnap.data();
-        times.push({ time: appt.time, duration: appt.duration || 30 }); // fallback if missing
+        times.push({ time: appt.time, duration: appt.duration || 30 });
       });
       setBookedTimes(times);
-
     };
-
     fetchBookedTimes();
   }, [selectedDate, id]);
 
   useEffect(() => {
     setError("");
   }, [selectedService, selectedDate, selectedTime]);
-
 
   const handleBook = async () => {
     if (!user || !selectedDate || !selectedTime || !business || !selectedService) {
@@ -91,7 +91,7 @@ const BusinessPublicProfile = () => {
       return;
     }
 
-    setError(""); // clear error before booking
+    setError("");
 
     const appointmentId = uuidv4();
     await setDoc(doc(db, "appointments", appointmentId), {
@@ -103,90 +103,102 @@ const BusinessPublicProfile = () => {
       duration: service.duration,
       date: formatDateLocal(selectedDate),
       time: selectedTime,
-      note: note.trim() || null, // null if empty
+      note: note.trim() || null,
     });
 
     alert("Appointment booked!");
     navigate("/appointments");
   };
 
-
-
   if (loading) return <p className="text-center mt-10">Loading...</p>;
   if (!business) return <p className="text-center mt-10 text-red-600">Business not found.</p>;
 
   const generateTimeSlots = () => {
     if (!selectedService || !selectedDate) return [];
+    if (!business?.services) return [];
 
     const service = business.services.find((s: any) => s.name === selectedService);
     if (!service) return [];
 
-    const duration = service.duration; // minutes
+    const availability: Availability | undefined = business.availability;
+
+    const dateStr = formatDateLocal(selectedDate);
+    if (availability?.blackoutDates?.includes(dateStr)) return []; // hard closed
+
+    const dayIdx = selectedDate.getDay() as DayIndex;
+    // fallback to 08:00–18:00 if no availability configured
+    const windows = availability?.weekly?.[dayIdx] ?? [{ start: "08:00", end: "18:00" }];
+
+    const duration = service.duration;
     const slots: string[] = [];
-
-    // Anchor the window to the SELECTED DATE (not "today")
-    const start = new Date(selectedDate);
-    start.setHours(8, 0, 0, 0); // 8:00 AM of selected day
-
-    const end = new Date(selectedDate);
-    end.setHours(18, 0, 0, 0); // 6:00 PM of selected day
-
-    // If booking for TODAY, do not show times in the past
     const now = new Date();
-    if (isSameLocalDay(selectedDate, now)) {
-      const minStart = roundUpToMinutes(now, 15); // round up to next 15-min interval
-      if (minStart > start) start.setTime(minStart.getTime());
-    }
 
-    // Build slots every 15 minutes
-    const cursor = new Date(start);
-    while (cursor <= end) {
-      const slotStart = new Date(cursor);
-      const slotEnd = new Date(cursor);
-      slotEnd.setMinutes(slotEnd.getMinutes() + duration);
+    const buildSlotsForWindow = (startHHMM: string, endHHMM: string) => {
+      const startMin = parseHHMM(startHHMM);
+      const endMin = parseHHMM(endHHMM);
 
-      // Skip if (still) in the past (covers edge where duration pushes it behind now)
-      if (isSameLocalDay(selectedDate, now) && slotEnd <= now) {
+      const windowStart = new Date(selectedDate);
+      windowStart.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+
+      const windowEnd = new Date(selectedDate);
+      windowEnd.setHours(Math.floor(endMin / 60), endMin % 60, 0, 0);
+
+      let cursor = new Date(windowStart);
+      if (isSameLocalDay(selectedDate, now)) {
+        const minStart = roundUpTo(now, 15);
+        if (minStart > cursor) cursor = minStart;
+      }
+
+      while (cursor < windowEnd) {
+        const slotStart = new Date(cursor);
+        const slotEnd = new Date(cursor);
+        slotEnd.setMinutes(slotEnd.getMinutes() + duration);
+
+        // Ensure slot fits entirely in window
+        if (slotEnd > windowEnd) break;
+
+        // booked overlap check
+        const overlaps = bookedTimes.some((booked) => {
+          const [hour, min, meridian] = booked.time.split(/[:\s]/);
+          const bookedStart = new Date(selectedDate);
+          bookedStart.setHours(
+            meridian?.toUpperCase() === "PM" && hour !== "12"
+              ? parseInt(hour) + 12
+              : parseInt(hour),
+            parseInt(min)
+          );
+          const bookedEnd = new Date(bookedStart);
+          bookedEnd.setMinutes(bookedEnd.getMinutes() + (booked.duration || 30));
+
+          return (
+            (slotStart >= bookedStart && slotStart < bookedEnd) ||
+            (slotEnd > bookedStart && slotEnd <= bookedEnd) ||
+            (slotStart <= bookedStart && slotEnd >= bookedEnd)
+          );
+        });
+
+        if (!overlaps) {
+          slots.push(
+            slotStart.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            })
+          );
+        }
+
         cursor.setMinutes(cursor.getMinutes() + 15);
-        continue;
       }
+    };
 
-      // Check overlap with existing bookings
-      const overlaps = bookedTimes.some((booked) => {
-        const [hour, min, meridian] = booked.time.split(/[:\s]/);
-        const bookedStart = new Date(selectedDate);
-        bookedStart.setHours(
-          meridian?.toUpperCase() === "PM" && hour !== "12" ? parseInt(hour) + 12 : parseInt(hour),
-          parseInt(min)
-        );
-        const bookedEnd = new Date(bookedStart);
-        bookedEnd.setMinutes(bookedEnd.getMinutes() + (booked.duration || 30));
-
-        return (
-          (slotStart >= bookedStart && slotStart < bookedEnd) ||
-          (slotEnd > bookedStart && slotEnd <= bookedEnd) ||
-          (slotStart <= bookedStart && slotEnd >= bookedEnd)
-        );
-      });
-
-      if (!overlaps) {
-        slots.push(
-          slotStart.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          })
-        );
-      }
-
-      cursor.setMinutes(cursor.getMinutes() + 15);
-    }
+    windows.forEach((w: any) => {
+      if (w?.start && w?.end) buildSlotsForWindow(w.start, w.end);
+    });
 
     return slots;
   };
 
-
-
+  const slots = selectedDate ? generateTimeSlots() : [];
 
   return (
     <div className="flex justify-center mt-10 mb-10">
@@ -214,17 +226,15 @@ const BusinessPublicProfile = () => {
         </p>
         <p className="text-gray-600 pt-2">{business.description || "N/A"}</p>
 
-        {/* Services table */}
+        {/* Services */}
         {business.services && business.services.length > 0 && (
           <div className="mt-6 text-left">
             <h3 className="text-gray-700 font-bold text-center mb-2">Services Offered:</h3>
-
             <div className="grid grid-cols-3 font-semibold text-sm border-b pb-1 mb-2 text-center">
               <span>Service</span>
               <span>Price</span>
               <span>Duration</span>
             </div>
-
             <ul className="space-y-1">
               {business.services.map((s: any, i: number) => (
                 <li
@@ -232,7 +242,7 @@ const BusinessPublicProfile = () => {
                   className="grid grid-cols-3 text-gray-700 text-sm border-b py-1 text-center"
                 >
                   <span>{s.name}</span>
-                  <span>${s.price.toFixed(2)}</span>
+                  <span>{displayPrice(s)}</span>
                   <span>{s.duration} min</span>
                 </li>
               ))}
@@ -252,14 +262,17 @@ const BusinessPublicProfile = () => {
             <option value="">Select a service</option>
             {business.services?.map((s: any, i: number) => (
               <option key={i} value={s.name}>
-                {s.name} — ${s.price.toFixed(2)}, {s.duration} min
+                {s.name} — {displayPrice(s)}, {s.duration} min
               </option>
             ))}
           </select>
 
           <DatePicker
             selected={selectedDate}
-            onChange={(date) => setSelectedDate(date)}
+            onChange={(date) => {
+              setSelectedDate(date);
+              setSelectedTime("");
+            }}
             minDate={new Date()}
             inline
             calendarClassName="rounded-lg shadow"
@@ -268,19 +281,26 @@ const BusinessPublicProfile = () => {
           {selectedDate && (
             <div className="mt-4">
               <div className="flex overflow-x-auto gap-2 px-1 pb-1">
-                {generateTimeSlots().map((time) => (
+                {slots.map((time) => (
                   <button
                     key={time}
                     onClick={() => setSelectedTime(time)}
-                    className={`min-w-[80px] px-3 py-1 border rounded-full text-sm whitespace-nowrap ${selectedTime === time
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-gray-800 hover:bg-blue-100"
+                    className={`min-w-[100px] px-3 py-1 border rounded-full text-sm whitespace-nowrap ${selectedTime === time
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-800 hover:bg-blue-100"
                       }`}
                   >
                     {time}
                   </button>
                 ))}
               </div>
+              {slots.length === 0 && (
+                <p className="mt-3 text-sm text-gray-500">
+                  {selectedService
+                    ? "No times available for this date."
+                    : "Please select a service first."}
+                </p>
+              )}
             </div>
           )}
 
@@ -304,9 +324,7 @@ const BusinessPublicProfile = () => {
               {error}
             </p>
           )}
-
         </div>
-
       </div>
     </div>
   );

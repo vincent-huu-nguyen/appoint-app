@@ -27,6 +27,8 @@ import {
 } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import profilePlaceholder from "../assets/profilePlaceholder.png";
+import AvailabilityEditor from "../components/AvailabilityEditor";
+import { Availability, defaultAvailability } from "../utils/availability";
 
 /* ----------------------------- Types & Helpers ---------------------------- */
 
@@ -134,6 +136,8 @@ const BusinessDashboard = () => {
     const [deletingAccount, setDeletingAccount] = useState(false);
     const [confirmText, setConfirmText] = useState("");
 
+    const [availability, setAvailability] = useState<Availability>(defaultAvailability());
+
     /* ---------------------------- Load data on mount --------------------------- */
 
     useEffect(() => {
@@ -176,7 +180,13 @@ const BusinessDashboard = () => {
                     pricePlus: !!s.pricePlus,
                 }));
                 setServices(svcs);
+                setAvailability(
+                    data.availability && data.availability.weekly && data.availability.blackoutDates
+                        ? data.availability
+                        : defaultAvailability()
+                );
             }
+
         };
 
         fetchAppointments();
@@ -239,6 +249,7 @@ const BusinessDashboard = () => {
                 email: businessInfo?.email,
                 description: descriptionInput,
                 services, // includes pricePlus
+                availability,
             },
             { merge: true }
         );
@@ -535,13 +546,13 @@ const BusinessDashboard = () => {
                                                 className="text-sm border p-2 rounded w-1/4 min-w-[126px]"
                                             />
                                             <label className="inline-flex items-center gap-2 ml-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={newServicePlus}
-                                                onChange={(e) => setNewServicePlus(e.target.checked)}
-                                            />
-                                            <span className="text-xs">Show price as “starting at” (+)</span>
-                                        </label>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newServicePlus}
+                                                    onChange={(e) => setNewServicePlus(e.target.checked)}
+                                                />
+                                                <span className="text-xs">Show price as “starting at” (+)</span>
+                                            </label>
                                         </div>
                                         <div className="flex">
                                             <input
@@ -577,6 +588,8 @@ const BusinessDashboard = () => {
                                         Add Service
                                     </button>
                                 </div>
+
+                                <AvailabilityEditor value={availability} onChange={setAvailability} />
 
                                 <div className="flex gap-4 justify-center">
                                     <button
