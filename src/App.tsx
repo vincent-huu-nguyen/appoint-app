@@ -9,7 +9,8 @@ import BusinessProfile from "./pages/BusinessProfile";
 import BusinessPublicProfile from "./pages/BusinessPublicProfile";
 import BusinessDashboard from "./pages/BusinessDashboard";
 import "react-datepicker/dist/react-datepicker.css";
-
+import BusinessCreateAppointment from "./pages/BusinessCreateAppointment";
+import BusinessPastAppointments from "./pages/BusinessPastAppointments";
 
 function App() {
   return (
@@ -36,6 +37,10 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route path="/dashboard/create-appointment" element={<BusinessCreateAppointment />} />
+        <Route path="/dashboard/create-appointment/:apptId" element={<BusinessCreateAppointment />} />
+        <Route path="/dashboard/appointments/past" element={<BusinessPastAppointments />} />
 
         {/* 👤 Profile Setup Pages */}
         <Route path="/profile/customer" element={<CustomerProfile />} />

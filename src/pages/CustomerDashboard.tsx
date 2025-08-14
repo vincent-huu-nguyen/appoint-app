@@ -9,13 +9,14 @@ const CustomerDashboard = () => {
   const [results, setResults] = useState<any[]>([]);
   const [viewingAppointments, setViewingAppointments] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [showPast, setShowPast] = useState(false); // NEW: toggle for past vs upcoming
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     await signOut(auth);
     setTimeout(() => {
       navigate("/");
-    }, 50); // short delay to avoid race condition
+    }, 50);
   };
 
   // ---- helpers ----
@@ -52,8 +53,8 @@ const CustomerDashboard = () => {
 
   // Fetch all business users
   const fetchBusinesses = async () => {
-    const q = query(collection(db, "users"), where("role", "==", "admin"));
-    const snapshot = await getDocs(q);
+    const qy = query(collection(db, "users"), where("role", "==", "admin"));
+    const snapshot = await getDocs(qy);
     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     setResults(data);
   };
@@ -61,8 +62,8 @@ const CustomerDashboard = () => {
   // Fetch user's appointments (then sort soon → later)
   const fetchAppointments = async () => {
     if (!user) return;
-    const q = query(collection(db, "appointments"), where("customerId", "==", user.uid));
-    const snapshot = await getDocs(q);
+    const qy = query(collection(db, "appointments"), where("customerId", "==", user.uid));
+    const snapshot = await getDocs(qy);
     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
     data.sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
     setAppointments(data);
@@ -76,6 +77,18 @@ const CustomerDashboard = () => {
     (biz.businessName || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  // --- derive upcoming vs past ---
+  const nowTs = Date.now();
+  const upcoming = appointments
+    .filter((a) => apptTimestamp(a) >= nowTs && a.active !== false) // active true or undefined
+    .sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
+
+  const past = appointments
+    .filter((a) => apptTimestamp(a) < nowTs || a.active === false || a.status === "completed")
+    .sort((a, b) => apptTimestamp(b) - apptTimestamp(a)); // most recent first
+
+  const list = showPast ? past : upcoming;
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -86,6 +99,7 @@ const CustomerDashboard = () => {
               onClick={async () => {
                 await fetchAppointments();
                 setViewingAppointments(true);
+                setShowPast(false);
               }}
               className="bg-indigo-800 hover:bg-indigo-900 text-white px-4 py-2 rounded"
             >
@@ -112,11 +126,33 @@ const CustomerDashboard = () => {
 
       {viewingAppointments ? (
         <>
-          {appointments.length === 0 ? (
-            <p className="text-gray-600">No appointments scheduled.</p>
+          {/* Toggle: Upcoming / Past */}
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              onClick={() => setShowPast(false)}
+              className={`px-4 py-2 rounded ${
+                !showPast ? "bg-indigo-600 text-white" : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              Upcoming
+            </button>
+            <button
+              onClick={() => setShowPast(true)}
+              className={`px-4 py-2 rounded ${
+                showPast ? "bg-gray-800 text-white" : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              Past
+            </button>
+          </div>
+
+          {list.length === 0 ? (
+            <p className="text-gray-600">
+              {showPast ? "No past appointments." : "No appointments scheduled."}
+            </p>
           ) : (
             <ul className="space-y-4">
-              {appointments.map((appt) => (
+              {list.map((appt) => (
                 <li key={appt.id} className="border p-4 rounded shadow">
                   <p className="font-bold">{appt.businessName}</p>
                   <p className="font-semibold">Phone Number: {appt.businessPhone}</p>
@@ -130,9 +166,21 @@ const CustomerDashboard = () => {
                     })}
                   </p>
                   <p>Time: {appt.time}</p>
-                  <p className="text-sm text-gray-500 pt-4">
-                    To reschedule or cancel an appointment, please call the business.
-                  </p>
+                  {appt.service && (
+                    <p>
+                      Service: {appt.service}
+                      {appt.duration ? ` • ${appt.duration} min` : ""}
+                    </p>
+                  )}
+                  {showPast ? (
+                    <p className="text-xs text-gray-500 mt-2">
+                      {appt.status === "completed" ? "Completed" : "Past"}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 pt-4">
+                      To reschedule or cancel an appointment, please contact the business.
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
