@@ -691,8 +691,8 @@ const BusinessDashboard = () => {
                                     <h2 className="text-2xl font-bold text-gray-800 mb-1">
                                         {businessInfo?.businessName}
                                     </h2>
-                                    <p className="text-gray-600 mb-1 font-bold">
-                                        <span className="font-bold">Owner:</span> {businessInfo?.name || "N/A"}
+                                    <p className="text-gray-600 mb-1 font-medium">
+                                        <span className="font-medium">Owner:</span> {businessInfo?.name || "N/A"}
                                     </p>
                                     <p className="text-gray-600 mb-4 font-bold">
                                         <span className="font-bold">Phone:</span>{" "}
