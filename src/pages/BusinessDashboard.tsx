@@ -583,7 +583,7 @@ const BusinessDashboard = () => {
                                                         ${service.price.toFixed(2)}
                                                         {service.pricePlus ? "+" : ""}
                                                     </span>
-                                                    <span className="w-1/4">{service.duration} min</span>
+                                                    <span className="w-1/4">{service.duration} mins</span>
                                                     <button
                                                         className="text-blue-600 text-xs font-medium"
                                                         onClick={() => {
@@ -641,7 +641,7 @@ const BusinessDashboard = () => {
                                                 onChange={(e) => setNewServiceDuration(e.target.value)}
                                                 className="text-sm border p-2 rounded w-1/4 min-w-[140px]"
                                             />
-                                            <p className="py-2 pl-1">min</p>
+                                            <p className="py-2 pl-1">mins</p>
                                         </div>
                                     </div>
 
@@ -691,10 +691,10 @@ const BusinessDashboard = () => {
                                     <h2 className="text-2xl font-bold text-gray-800 mb-1">
                                         {businessInfo?.businessName}
                                     </h2>
-                                    <p className="text-gray-600 mb-1">
+                                    <p className="text-gray-600 mb-1 font-bold">
                                         <span className="font-bold">Owner:</span> {businessInfo?.name || "N/A"}
                                     </p>
-                                    <p className="text-gray-600 mb-4">
+                                    <p className="text-gray-600 mb-4 font-bold">
                                         <span className="font-bold">Phone:</span>{" "}
                                         {formatPhoneNumber(businessInfo?.phone || "")}
                                     </p>
@@ -734,7 +734,7 @@ const BusinessDashboard = () => {
                                                             ${s.price.toFixed(2)}
                                                             {s.pricePlus ? "+" : ""}
                                                         </span>
-                                                        <span>{s.duration} min</span>
+                                                        <span>{s.duration} mins</span>
                                                     </li>
                                                 ))}
                                             </ul>
