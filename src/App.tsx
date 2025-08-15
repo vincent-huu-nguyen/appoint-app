@@ -1,3 +1,4 @@
+// src/App.tsx
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -11,16 +12,20 @@ import BusinessDashboard from "./pages/BusinessDashboard";
 import "react-datepicker/dist/react-datepicker.css";
 import BusinessCreateAppointment from "./pages/BusinessCreateAppointment";
 import BusinessPastAppointments from "./pages/BusinessPastAppointments";
+import VerifyEmail from "./pages/VerifyEmail"; // NEW
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Public */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmail />} /> {/* NEW */}
+        <Route path="/business/:id" element={<BusinessPublicProfile />} />
 
-        {/* 🔒 Protected Routes */}
+        {/* Customer-only */}
         <Route
           path="/appointments"
           element={
@@ -29,25 +34,27 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Admin-only (grouped) */}
         <Route
-          path="/dashboard"
+          element={<ProtectedRoute requiredRole="admin" />}
+        >
+          <Route path="/dashboard" element={<BusinessDashboard />} />
+          <Route path="/dashboard/create-appointment" element={<BusinessCreateAppointment />} />
+          <Route path="/dashboard/create-appointment/:apptId" element={<BusinessCreateAppointment />} />
+          <Route path="/dashboard/appointments/past" element={<BusinessPastAppointments />} />
+          <Route path="/profile/business" element={<BusinessProfile />} />
+        </Route>
+
+        {/* Customer profile (if this is private to logged-in customers) */}
+        <Route
+          path="/profile/customer"
           element={
-            <ProtectedRoute requiredRole="admin">
-              <BusinessDashboard />
+            <ProtectedRoute requiredRole="customer">
+              <CustomerProfile />
             </ProtectedRoute>
           }
         />
-
-        <Route path="/dashboard/create-appointment" element={<BusinessCreateAppointment />} />
-        <Route path="/dashboard/create-appointment/:apptId" element={<BusinessCreateAppointment />} />
-        <Route path="/dashboard/appointments/past" element={<BusinessPastAppointments />} />
-
-        {/* 👤 Profile Setup Pages */}
-        <Route path="/profile/customer" element={<CustomerProfile />} />
-        <Route path="/profile/business" element={<BusinessProfile />} />
-
-        {/* Business Public Profile */}
-        <Route path="/business/:id" element={<BusinessPublicProfile />} />
       </Routes>
     </Router>
   );

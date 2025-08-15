@@ -9,7 +9,8 @@ const CustomerDashboard = () => {
   const [results, setResults] = useState<any[]>([]);
   const [viewingAppointments, setViewingAppointments] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [showPast, setShowPast] = useState(false); // NEW: toggle for past vs upcoming
+  const [showPast, setShowPast] = useState(false); // toggle for past vs upcoming
+  const [hasLoadedBusinesses, setHasLoadedBusinesses] = useState(false); // NEW: lazy fetch on first type
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -69,9 +70,15 @@ const CustomerDashboard = () => {
     setAppointments(data);
   };
 
+  // NEW: Only load businesses once the user starts typing (and only once)
   useEffect(() => {
-    if (!viewingAppointments) fetchBusinesses();
-  }, [viewingAppointments]);
+    if (!viewingAppointments && search.trim().length > 0 && !hasLoadedBusinesses) {
+      (async () => {
+        await fetchBusinesses();
+        setHasLoadedBusinesses(true);
+      })();
+    }
+  }, [search, viewingAppointments, hasLoadedBusinesses]);
 
   const filtered = results.filter((biz) =>
     (biz.businessName || "").toLowerCase().includes(search.toLowerCase())
@@ -197,18 +204,24 @@ const CustomerDashboard = () => {
             className="w-full border p-2 rounded mb-4"
           />
 
-          <ul className="space-y-2 mb-8">
-            {filtered.map((biz) => (
-              <li
-                key={biz.id}
-                className="border p-4 rounded hover:bg-gray-100 cursor-pointer"
-                onClick={() => navigate(`/business/${biz.id}`)}
-              >
-                <h3 className="font-bold text-lg">{biz.businessName}</h3>
-                <p className="text-sm text-gray-600">Owner: {biz.name}</p>
-              </li>
-            ))}
-          </ul>
+          {search.trim().length === 0 ? (
+            <p className="text-sm text-gray-500">Start typing to search for businesses…</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-sm text-gray-500">No matches found.</p>
+          ) : (
+            <ul className="space-y-2 mb-8">
+              {filtered.map((biz) => (
+                <li
+                  key={biz.id}
+                  className="border p-4 rounded hover:bg-gray-100 cursor-pointer"
+                  onClick={() => navigate(`/business/${biz.id}`)}
+                >
+                  <h3 className="font-bold text-lg">{biz.businessName}</h3>
+                  <p className="text-sm text-gray-600">Owner: {biz.name}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
     </div>

@@ -39,6 +39,21 @@ const isSameLocalDay = (a: Date, b: Date) =>
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
 
+const fontCssFromId = (id?: string) => {
+  const MAP: Record<string, string> = {
+    "ui-sans":
+      'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif',
+    "ui-serif": 'Georgia, "Times New Roman", Times, serif',
+    "ui-mono": '"Courier New", Courier, monospace',
+    "ui-display": 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif',
+    "ui-round":
+      '"Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Arial, sans-serif',
+    "gf-lobster": '"Lobster", cursive',
+    "gf-poppins": '"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
+  };
+  return MAP[id || "ui-sans"] || MAP["ui-sans"];
+};
+
 /* ----------------------------- Component ----------------------------- */
 
 const BusinessPublicProfile = () => {
@@ -242,7 +257,10 @@ const BusinessPublicProfile = () => {
 
         {/* Profile info — matched layout to BusinessDashboard */}
         <div className="space-y-2 mt-2 text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">
+          <h2
+            className="text-2xl font-bold text-gray-800 mb-1"
+            style={{ fontFamily: fontCssFromId(business?.businessNameFontId) }}
+          >
             {business.businessName}
           </h2>
 
@@ -329,11 +347,10 @@ const BusinessPublicProfile = () => {
                   <button
                     key={time}
                     onClick={() => setSelectedTime(time)}
-                    className={`min-w-[100px] px-3 py-1 border rounded-full text-sm whitespace-nowrap ${
-                      selectedTime === time
+                    className={`min-w-[100px] px-3 py-1 border rounded-full text-sm whitespace-nowrap ${selectedTime === time
                         ? "bg-blue-600 text-white"
                         : "bg-white text-gray-800 hover:bg-blue-100"
-                    }`}
+                      }`}
                   >
                     {time}
                   </button>

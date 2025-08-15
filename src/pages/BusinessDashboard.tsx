@@ -92,6 +92,23 @@ const formatPhoneNumber = (phone: string) => {
     return match ? `${match[1]}-${match[2]}-${match[3]}` : phone;
 };
 
+// Put this above the component (e.g., under Types & Helpers)
+type FontOption = { id: string; label: string; css: string };
+
+const FONT_OPTIONS: FontOption[] = [
+    { id: "ui-sans", label: "Default (Sans-Serif)", css: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif' },
+    { id: "ui-serif", label: "Serif", css: 'Georgia, "Times New Roman", Times, serif' },
+    { id: "ui-mono", label: "Monospace", css: '"Courier New", Courier, monospace' },
+    { id: "ui-display", label: "Display (Impact)", css: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif' },
+    { id: "ui-round", label: "Rounded", css: '"Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Arial, sans-serif' },
+    { id: "gf-lobster", label: "Lobster (Google)", css: '"Lobster", cursive' },
+    { id: "gf-poppins", label: "Poppins (Google)", css: '"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif' },
+];
+
+const fontCssFromId = (id?: string) =>
+    FONT_OPTIONS.find(f => f.id === id)?.css || FONT_OPTIONS[0].css;
+
+
 /* ------------------------------- Component -------------------------------- */
 
 const BusinessDashboard = () => {
@@ -108,6 +125,9 @@ const BusinessDashboard = () => {
     const [businessNameInput, setBusinessNameInput] = useState("");
     const [phoneInput, setPhoneInput] = useState("");
     const [descriptionInput, setDescriptionInput] = useState("");
+
+    // Inside the component state block
+    const [businessNameFontId, setBusinessNameFontId] = useState<string>("ui-sans");
 
     // New availability note state
     const [availabilityNote, setAvailabilityNote] = useState("");
@@ -211,6 +231,7 @@ const BusinessDashboard = () => {
                 // hydrate text fields from Firestore
                 setDescriptionInput(data.description || "");
                 setAvailabilityNote(data.availabilityNote || "");
+                setBusinessNameFontId(data.businessNameFontId || "ui-sans");
             }
         };
 
@@ -275,6 +296,7 @@ const BusinessDashboard = () => {
                 availabilityNote, // NEW
                 services, // includes pricePlus
                 availability,
+                businessNameFontId,
             },
             { merge: true }
         );
@@ -455,21 +477,45 @@ const BusinessDashboard = () => {
 
                         {editingProfile ? (
                             <div className="text-left">
-                                <p className="mt-4">Name</p>
-                                <input
-                                    type="text"
-                                    placeholder="Your Name"
-                                    value={nameInput}
-                                    onChange={(e) => setNameInput(e.target.value)}
-                                    className="border p-2 w-full rounded"
-                                />
-
                                 <p className="mt-4">Business Name</p>
                                 <input
                                     type="text"
                                     placeholder="Business Name"
                                     value={businessNameInput}
                                     onChange={(e) => setBusinessNameInput(e.target.value)}
+                                    className="border p-2 w-full rounded"
+                                />
+
+                                <p className="mt-4">Business Name Font</p>
+                                <select
+                                    value={businessNameFontId}
+                                    onChange={(e) => setBusinessNameFontId(e.target.value)}
+                                    className="border p-2 w-full rounded"
+                                >
+                                    {FONT_OPTIONS.map((f) => (
+                                        <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>
+                                            {f.label}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {/* Live preview of the business name using the selected font */}
+                                <div className="mt-2 p-3 rounded border bg-gray-50">
+                                    <div className="text-xs text-gray-500 mb-1">Preview</div>
+                                    <div
+                                        className="text-2xl font-bold"
+                                        style={{ fontFamily: fontCssFromId(businessNameFontId) }}
+                                    >
+                                        {businessNameInput || "Your Business Name"}
+                                    </div>
+                                </div>
+
+                                <p className="mt-4">Owner Name</p>
+                                <input
+                                    type="text"
+                                    placeholder="Your Name"
+                                    value={nameInput}
+                                    onChange={(e) => setNameInput(e.target.value)}
                                     className="border p-2 w-full rounded"
                                 />
 
@@ -688,9 +734,13 @@ const BusinessDashboard = () => {
                         ) : (
                             <>
                                 <div className="space-y-2 mt-4 text-center">
-                                    <h2 className="text-2xl font-bold text-gray-800 mb-1">
+                                    <h2
+                                        className="text-2xl font-bold text-gray-800 mb-1"
+                                        style={{ fontFamily: fontCssFromId(businessInfo?.businessNameFontId) }}
+                                    >
                                         {businessInfo?.businessName}
                                     </h2>
+
                                     <p className="text-gray-600 mb-1 font-medium">
                                         <span className="font-medium">Owner:</span> {businessInfo?.name || "N/A"}
                                     </p>
@@ -753,7 +803,8 @@ const BusinessDashboard = () => {
                                         setBusinessNameInput(businessInfo?.businessName || "");
                                         setPhoneInput(businessInfo?.phone || "");
                                         setDescriptionInput(businessInfo?.description || "");
-                                        setAvailabilityNote(businessInfo?.availabilityNote || ""); // hydrate
+                                        setAvailabilityNote(businessInfo?.availabilityNote || "");
+                                        setBusinessNameFontId(businessInfo?.businessNameFontId || "ui-sans");
                                     }}
                                     className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800"
                                 >
@@ -799,9 +850,8 @@ const BusinessDashboard = () => {
                                                 ? confirmText !== businessInfo.businessName
                                                 : confirmText !== "DELETE")
                                         }
-                                        className={`px-3 py-1 rounded text-white ${
-                                            deletingAccount ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
-                                        }`}
+                                        className={`px-3 py-1 rounded text-white ${deletingAccount ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                                            }`}
                                     >
                                         {deletingAccount ? "Deleting…" : "Confirm Delete"}
                                     </button>
@@ -857,9 +907,8 @@ const BusinessDashboard = () => {
                                 return (
                                     <li
                                         key={appt.id}
-                                        className={`border p-4 rounded shadow ${
-                                            isPast ? "bg-gray-300" : "bg-white"
-                                        }`}
+                                        className={`border p-4 rounded shadow ${isPast ? "bg-gray-300" : "bg-white"
+                                            }`}
                                     >
                                         <p className="font-semibold">Customer: {appt.customerName}</p>
                                         <p>Phone: {formatPhoneNumber(appt.customerPhone || "")}</p>
@@ -925,11 +974,10 @@ const BusinessDashboard = () => {
                                                 <button
                                                     onClick={() => handleDeleteAppointment(appt.id)}
                                                     disabled={deletingId === appt.id}
-                                                    className={`mt-2 ml-2 px-3 py-1 rounded text-white ${
-                                                        deletingId === appt.id
-                                                            ? "bg-gray-700 cursor-not-allowed"
-                                                            : "bg-gray-700 hover:bg-red-900"
-                                                    }`}
+                                                    className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id
+                                                        ? "bg-gray-700 cursor-not-allowed"
+                                                        : "bg-gray-700 hover:bg-red-900"
+                                                        }`}
                                                 >
                                                     {deletingId === appt.id ? "Deleting..." : "Delete"}
                                                 </button>
