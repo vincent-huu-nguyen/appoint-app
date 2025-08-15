@@ -246,11 +246,11 @@ const BusinessPublicProfile = () => {
             {business.businessName}
           </h2>
 
-          <p className="text-gray-600">
-            <span className="font-bold">Owner:</span> {business.name || "N/A"}
+          <p className="text-gray-600 font-medium">
+            <span className="font-medium">Owner:</span> {business.name || "N/A"}
           </p>
 
-          <p className="text-gray-600">
+          <p className="text-gray-600 font-bold">
             <span className="font-bold">Phone:</span> {formatPhoneNumber(business.phone)}
           </p>
 
@@ -285,7 +285,7 @@ const BusinessPublicProfile = () => {
                 >
                   <span>{s.name}</span>
                   <span>{displayPrice(s)}</span>
-                  <span>{s.duration} min</span>
+                  <span>{s.duration} mins</span>
                 </li>
               ))}
             </ul>
