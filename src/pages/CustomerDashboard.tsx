@@ -326,7 +326,7 @@ const CustomerDashboard = () => {
                     <img
                       src={getBizAvatarUrl(biz)}
                       alt={`${biz.businessName || "Business"} logo`}
-                      className="h-12 w-12 rounded-full object-cover bg-gray-100 flex-shrink-0 transition group-hover:scale-105"
+                      className="h-12 w-12 rounded-full object-cover bg-gray-300 flex-shrink-0 transition group-hover:scale-105"
                       loading="lazy"
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).src = profilePlaceholder;

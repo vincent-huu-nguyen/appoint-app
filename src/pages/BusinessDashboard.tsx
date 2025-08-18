@@ -412,7 +412,7 @@ const BusinessDashboard = () => {
             <img
               src={businessInfo?.profilePicture || profilePlaceholder}
               alt="Profile"
-              className="w-32 h-32 object-cover rounded-full bg-gray-200 mx-auto mb-4"
+              className="w-32 h-32 object-cover rounded-full bg-gray-300 mx-auto mb-4"
             />
 
             {editingProfile && (
@@ -442,12 +442,12 @@ const BusinessDashboard = () => {
                   onChange={(e) => setVisibility(e.target.value as Visibility)}
                   className="border p-2 w-full rounded"
                 >
-                  <option value="public">Public (auto-show to customers)</option>
+                  <option value="public">Public</option>
                   <option value="search">Public on search only</option>
                   <option value="private">Private (hidden from customers)</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Public: customers see your business without searching. Search: customers must search your name. Private: hidden from customers.
+                  Public: customers see your business without searching on \featured businesses. Search: customers must search your name. Private: hidden from customers.
                 </p>
 
                 <p className="mt-4">Business Name</p>
