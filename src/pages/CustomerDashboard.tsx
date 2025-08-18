@@ -1,66 +1,140 @@
-import { useEffect, useState } from "react";
+// src/pages/CustomerDashboard.tsx
+import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { db, auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import profilePlaceholder from "../assets/profilePlaceholder.png";
+
+type Visibility = "public" | "search" | "private";
+
+type Biz = {
+  id: string;
+  role?: string;
+  businessName?: string;
+  name?: string;
+  phone?: string;
+  visibility?: Visibility; // may be missing on older docs
+  profilePicture?: string; // HTTPS URL
+  // Back-compat keys
+  profilePhotoUrl?: string;
+  photoURL?: string;
+  profileImageUrl?: string;
+  avatarUrl?: string;
+  profilePicUrl?: string;
+  profilePictureUrl?: string;
+  [k: string]: any;
+};
+
+const toLocalDate = (yyyymmdd: string) => {
+  const [y, m, d] = yyyymmdd.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+const parseMinutes = (t: string) => {
+  const m12 = t?.match?.(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (m12) {
+    let h = parseInt(m12[1], 10);
+    const m = parseInt(m12[2], 10);
+    const ampm = m12[3].toUpperCase();
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  const m24 = t?.match?.(/^(\d{1,2}):(\d{2})$/);
+  if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+  return 0;
+};
+
+const apptTimestamp = (a: { date: string; time: string }) => {
+  const [y, m, d] = a.date.split("-").map(Number);
+  const minutes = parseMinutes(a.time);
+  const base = new Date(y, m - 1, d);
+  base.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return base.getTime();
+};
+
+const getBizAvatarUrl = (biz: Biz) =>
+  biz.profilePicture ||
+  biz.profilePhotoUrl ||
+  biz.photoURL ||
+  biz.profileImageUrl ||
+  biz.avatarUrl ||
+  biz.profilePicUrl ||
+  biz.profilePictureUrl ||
+  profilePlaceholder;
+
+const normalizeVis = (v?: Visibility): Visibility =>
+  (v as Visibility) || "search"; // treat missing as "search" for older docs
 
 const CustomerDashboard = () => {
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState<any[]>([]);
+  const [allAdmins, setAllAdmins] = useState<Biz[]>([]);          // role == "admin" (single query)
+  const [loadedAdmins, setLoadedAdmins] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
   const [viewingAppointments, setViewingAppointments] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [showPast, setShowPast] = useState(false); // toggle for past vs upcoming
-  const [hasLoadedBusinesses, setHasLoadedBusinesses] = useState(false); // NEW: lazy fetch on first type
+  const [showPast, setShowPast] = useState(false);
   const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    setTimeout(() => {
-      navigate("/");
-    }, 50);
-  };
-
-  // ---- helpers ----
-  const toLocalDate = (yyyymmdd: string) => {
-    const [y, m, d] = yyyymmdd.split("-").map(Number);
-    return new Date(y, m - 1, d); // local midnight
-  };
-
-  const parseMinutes = (t: string) => {
-    // supports "h:mm AM/PM" or "HH:mm"
-    const m12 = t?.match?.(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (m12) {
-      let h = parseInt(m12[1], 10);
-      const m = parseInt(m12[2], 10);
-      const ampm = m12[3].toUpperCase();
-      if (ampm === "PM" && h !== 12) h += 12;
-      if (ampm === "AM" && h === 12) h = 0;
-      return h * 60 + m;
-    }
-    const m24 = t?.match?.(/^(\d{1,2}):(\d{2})$/);
-    if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
-    return 0;
-  };
-
-  const apptTimestamp = (a: { date: string; time: string }) => {
-    const [y, m, d] = a.date.split("-").map(Number);
-    const minutes = parseMinutes(a.time);
-    const base = new Date(y, m - 1, d);
-    base.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
-    return base.getTime();
-  };
 
   const user = auth.currentUser;
 
-  // Fetch all business users
-  const fetchBusinesses = async () => {
-    const qy = query(collection(db, "users"), where("role", "==", "admin"));
-    const snapshot = await getDocs(qy);
-    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    setResults(data);
+  const handleLogout = async () => {
+    await signOut(auth);
+    setTimeout(() => navigate("/"), 50);
   };
 
-  // Fetch user's appointments (then sort soon → later)
+  // Fetch ALL admin businesses once. Filter by visibility in memory.
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      try {
+        setErr(null);
+        const qy = query(collection(db, "users"), where("role", "==", "admin"));
+        const snap = await getDocs(qy);
+        const data: Biz[] = snap.docs.map((d) => ({ ...(d.data() as Biz), id: d.id }));
+        // Optional: sort for determinism
+        data.sort((a, b) => (a.businessName || "").localeCompare(b.businessName || ""));
+        setAllAdmins(data);
+      } catch (e: any) {
+        console.error("Failed to load businesses", e);
+        setErr("We couldn't load businesses right now.");
+      } finally {
+        setLoadedAdmins(true);
+      }
+    };
+    fetchAdmins();
+  }, []);
+
+  // Derived lists
+  const publicOnly = useMemo(
+    () => allAdmins.filter((b) => normalizeVis(b.visibility) === "public"),
+    [allAdmins]
+  );
+
+  const searchable = useMemo(
+    () =>
+      allAdmins.filter((b) => {
+        const vis = normalizeVis(b.visibility);
+        return vis === "public" || vis === "search";
+      }),
+    [allAdmins]
+  );
+
+  // Search results (name or owner)
+  const filteredSearchResults = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return searchable
+      .filter(
+        (biz) =>
+          (biz.businessName || "").toLowerCase().includes(q) ||
+          (biz.name || "").toLowerCase().includes(q)
+      )
+      .sort((a, b) => (a.businessName || "").localeCompare(b.businessName || ""));
+  }, [search, searchable]);
+
+  // Fetch user's appointments
   const fetchAppointments = async () => {
     if (!user) return;
     const qy = query(collection(db, "appointments"), where("customerId", "==", user.uid));
@@ -70,30 +144,14 @@ const CustomerDashboard = () => {
     setAppointments(data);
   };
 
-  // NEW: Only load businesses once the user starts typing (and only once)
-  useEffect(() => {
-    if (!viewingAppointments && search.trim().length > 0 && !hasLoadedBusinesses) {
-      (async () => {
-        await fetchBusinesses();
-        setHasLoadedBusinesses(true);
-      })();
-    }
-  }, [search, viewingAppointments, hasLoadedBusinesses]);
-
-  const filtered = results.filter((biz) =>
-    (biz.businessName || "").toLowerCase().includes(search.toLowerCase())
-  );
-
-  // --- derive upcoming vs past ---
+  // --- upcoming vs past ---
   const nowTs = Date.now();
   const upcoming = appointments
-    .filter((a) => apptTimestamp(a) >= nowTs && a.active !== false) // active true or undefined
+    .filter((a) => apptTimestamp(a) >= nowTs && a.active !== false)
     .sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
-
   const past = appointments
     .filter((a) => apptTimestamp(a) < nowTs || a.active === false || a.status === "completed")
-    .sort((a, b) => apptTimestamp(b) - apptTimestamp(a)); // most recent first
-
+    .sort((a, b) => apptTimestamp(b) - apptTimestamp(a));
   const list = showPast ? past : upcoming;
 
   return (
@@ -121,7 +179,6 @@ const CustomerDashboard = () => {
               Book an Appointment
             </button>
           )}
-
           <button
             onClick={handleLogout}
             className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 ml-2 rounded"
@@ -130,6 +187,13 @@ const CustomerDashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* Error banner (shows if Firestore query fails) */}
+      {err && (
+        <div className="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">
+          {err} Try again in a moment.
+        </div>
+      )}
 
       {viewingAppointments ? (
         <>
@@ -204,20 +268,77 @@ const CustomerDashboard = () => {
             className="w-full border p-2 rounded mb-4"
           />
 
-          {search.trim().length === 0 ? (
-            <p className="text-sm text-gray-500">Start typing to search for businesses…</p>
-          ) : filtered.length === 0 ? (
+          {/* Loading state for first admin fetch */}
+          {!loadedAdmins ? (
+            <p className="text-sm text-gray-500">Loading businesses…</p>
+          ) : search.trim().length === 0 ? (
+            // Featured PUBLIC businesses
+            <>
+              {publicOnly.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  No featured businesses yet. Start typing to search.
+                </p>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold mb-2">Featured Businesses</h2>
+                  <ul className="space-y-2 mb-8">
+                    {publicOnly.map((biz) => (
+                      <li
+                        key={biz.id}
+                        className="group border p-4 rounded hover:bg-gray-100 cursor-pointer"
+                        onClick={() => navigate(`/business/${biz.id}`)}
+                      >
+                        <div className="flex items-center gap-4">
+                          <img
+                            src={getBizAvatarUrl(biz)}
+                            alt={`${biz.businessName || "Business"} logo`}
+                            className="h-12 w-12 rounded-full object-cover bg-gray-100 flex-shrink-0 transition group-hover:scale-105"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = profilePlaceholder;
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-lg truncate">
+                              {biz.businessName || "Unnamed Business"}
+                            </h3>
+                            <p className="text-sm text-gray-600 truncate">Owner: {biz.name || "—"}</p>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          ) : // Searching: use the preloaded all-admins list filtered by visibility!=private
+          filteredSearchResults.length === 0 ? (
             <p className="text-sm text-gray-500">No matches found.</p>
           ) : (
             <ul className="space-y-2 mb-8">
-              {filtered.map((biz) => (
+              {filteredSearchResults.map((biz) => (
                 <li
                   key={biz.id}
-                  className="border p-4 rounded hover:bg-gray-100 cursor-pointer"
+                  className="group border p-4 rounded hover:bg-gray-100 cursor-pointer"
                   onClick={() => navigate(`/business/${biz.id}`)}
                 >
-                  <h3 className="font-bold text-lg">{biz.businessName}</h3>
-                  <p className="text-sm text-gray-600">Owner: {biz.name}</p>
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={getBizAvatarUrl(biz)}
+                      alt={`${biz.businessName || "Business"} logo`}
+                      className="h-12 w-12 rounded-full object-cover bg-gray-100 flex-shrink-0 transition group-hover:scale-105"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = profilePlaceholder;
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-lg truncate">
+                        {biz.businessName || "Unnamed Business"}
+                      </h3>
+                      <p className="text-sm text-gray-600 truncate">Owner: {biz.name || "—"}</p>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
