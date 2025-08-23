@@ -1,5 +1,5 @@
 // src/pages/BusinessDashboard.tsx
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection, getDocs, query, where, doc, getDoc, setDoc, deleteDoc,
 } from "firebase/firestore";
@@ -41,6 +41,23 @@ type Service = {
   price: number;
   duration: number;
   pricePlus?: boolean;
+};
+
+const getCustomerInfo = async (customerId: any) => {
+  if (typeof customerId !== "string" || customerId.trim() === "") {
+    return { name: "Unknown", phone: "N/A" };
+  }
+  try {
+    const ref = doc(db, "users", customerId);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data() as any;
+      return { name: d.name || "Unknown", phone: d.phone || "N/A" };
+    }
+  } catch (e) {
+    console.warn("Failed to read customer doc:", e);
+  }
+  return { name: "Unknown", phone: "N/A" };
 };
 
 const toLocalDate = (yyyymmdd: string) => {
@@ -92,6 +109,32 @@ const FONT_OPTIONS: FontOption[] = [
 const fontCssFromId = (id?: string) =>
   FONT_OPTIONS.find(f => f.id === id)?.css || FONT_OPTIONS[0].css;
 
+// --- calendar helpers ---
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const ymdFromDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
+const endOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+const getMonthMatrix = (base: Date) => {
+  const first = startOfMonth(base);
+  const last = endOfMonth(base);
+
+  const firstWeekday = first.getDay(); // 0=Sun
+  const daysInMonth = last.getDate();
+
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push(new Date(base.getFullYear(), base.getMonth(), day));
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+  while (cells.length < 42) cells.push(null);
+
+  const weeks: (Date | null)[][] = [];
+  for (let i = 0; i < 42; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+};
+
 /* ------------------------------- Component -------------------------------- */
 
 const BusinessDashboard = () => {
@@ -108,7 +151,7 @@ const BusinessDashboard = () => {
   const [businessNameInput, setBusinessNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [descriptionInput, setDescriptionInput] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("search"); // NEW
+  const [visibility, setVisibility] = useState<Visibility>("search");
 
   const [businessNameFontId, setBusinessNameFontId] = useState<string>("ui-sans");
   const [availabilityNote, setAvailabilityNote] = useState("");
@@ -155,6 +198,14 @@ const BusinessDashboard = () => {
 
   const [availability, setAvailability] = useState<Availability>(defaultAvailability());
 
+  // --- new: view toggle + calendar state ---
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [selectedDateYMD, setSelectedDateYMD] = useState<string | null>(null);
+
   /* ---------------------------- Load data on mount --------------------------- */
 
   useEffect(() => {
@@ -165,18 +216,17 @@ const BusinessDashboard = () => {
 
       const data: Appt[] = await Promise.all(
         snapshot.docs.map(async (docSnap) => {
-          const appt = docSnap.data() as Omit<Appt, "id" | "customerName" | "customerPhone">;
-          const customerRef = doc(db, "users", appt.customerId);
-          const customerSnap = await getDoc(customerRef);
-          const customerData = customerSnap.exists() ? (customerSnap.data() as any) : {};
+          const appt = docSnap.data() as any;
+          const { name, phone } = await getCustomerInfo(appt.customerId);
           return {
             id: docSnap.id,
             ...appt,
-            customerName: customerData.name || "Unknown",
-            customerPhone: customerData.phone || "N/A",
-          };
+            customerName: name,
+            customerPhone: phone,
+          } as Appt;
         })
       );
+
 
       data.sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
       setAppointments(data);
@@ -205,7 +255,6 @@ const BusinessDashboard = () => {
         setAvailabilityNote(data.availabilityNote || "");
         setBusinessNameFontId(data.businessNameFontId || "ui-sans");
 
-        // NEW: hydrate visibility (default 'search' if missing)
         setVisibility((data.visibility as Visibility) || "search");
       }
     };
@@ -213,6 +262,40 @@ const BusinessDashboard = () => {
     fetchAppointments();
     fetchBusiness();
   }, [user]);
+
+  /* ------------------------------- Derived ---------------------------------- */
+
+  const nowTs = Date.now();
+
+  const filtered = appointments
+    .slice()
+    .sort((a, b) => apptTimestamp(a) - apptTimestamp(b))
+    .filter((appt) => {
+      const ts = apptTimestamp(appt);
+      const isFuture = ts >= nowTs;
+      const isCompleted = appt.active === false || appt.status === "completed";
+      return isFuture || (!isFuture && !isCompleted);
+    })
+    .filter((appt) => (appt.customerName || "").toLowerCase().includes(search.toLowerCase()));
+
+  const apptsByDate = useMemo(() => {
+    const map: Record<string, Appt[]> = {};
+    appointments.forEach((a) => {
+      if (!map[a.date]) map[a.date] = [];
+      map[a.date].push(a);
+    });
+    return map;
+  }, [appointments]);
+
+  const selectedDayAppts = useMemo(() => {
+    if (!selectedDateYMD) return [];
+    const list = apptsByDate[selectedDateYMD] || [];
+    return list
+      .filter((appt) =>
+        (appt.customerName || "").toLowerCase().includes(search.toLowerCase())
+      )
+      .sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
+  }, [selectedDateYMD, apptsByDate, search]);
 
   /* ------------------------------- Handlers -------------------------------- */
 
@@ -226,18 +309,17 @@ const BusinessDashboard = () => {
     );
     const data: Appt[] = await Promise.all(
       snapshot.docs.map(async (docSnap) => {
-        const appt = docSnap.data() as Omit<Appt, "id" | "customerName" | "customerPhone">;
-        const customerRef = doc(db, "users", appt.customerId);
-        const customerSnap = await getDoc(customerRef);
-        const customerData = customerSnap.exists() ? (customerSnap.data() as any) : {};
+        const appt = docSnap.data() as any;
+        const { name, phone } = await getCustomerInfo(appt.customerId);
         return {
           id: docSnap.id,
           ...appt,
-          customerName: customerData.name || "Unknown",
-          customerPhone: customerData.phone || "N/A",
-        };
+          customerName: name,
+          customerPhone: phone,
+        } as Appt;
       })
     );
+
     data.sort((a, b) => apptTimestamp(a) - apptTimestamp(b));
     setAppointments(data);
     setEditingApptId(null);
@@ -272,7 +354,7 @@ const BusinessDashboard = () => {
         services,
         availability,
         businessNameFontId,
-        visibility, // NEW
+        visibility,
       },
       { merge: true }
     );
@@ -371,19 +453,6 @@ const BusinessDashboard = () => {
 
   /* --------------------------------- Render -------------------------------- */
 
-  const nowTs = Date.now();
-
-  const filtered = appointments
-    .slice()
-    .sort((a, b) => apptTimestamp(a) - apptTimestamp(b))
-    .filter((appt) => {
-      const ts = apptTimestamp(appt);
-      const isFuture = ts >= nowTs;
-      const isCompleted = appt.active === false || appt.status === "completed";
-      return isFuture || (!isFuture && !isCompleted);
-    })
-    .filter((appt) => (appt.customerName || "").toLowerCase().includes(search.toLowerCase()));
-
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center gap-4 mb-6">
@@ -435,7 +504,6 @@ const BusinessDashboard = () => {
 
             {editingProfile ? (
               <div className="text-left">
-                {/* Visibility selector */}
                 <p className="mt-2 font-medium">Visibility</p>
                 <select
                   value={visibility}
@@ -447,7 +515,7 @@ const BusinessDashboard = () => {
                   <option value="private">Private (hidden from customers)</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Public: customers see your business without searching on \featured businesses. Search: customers must search your name. Private: hidden from customers.
+                  Public: customers see your business without searching on featured businesses. Search: customers must search your name. Private: hidden from customers.
                 </p>
 
                 <p className="mt-4">Business Name</p>
@@ -520,7 +588,7 @@ const BusinessDashboard = () => {
                   style={{ minHeight: "6rem" }}
                 />
 
-                {/* Services editor (unchanged) */}
+                {/* Services editor */}
                 <div className="space-y-2 text-left border-t border-b border-gray-300 py-8">
                   <h3 className="text-lg font-semibold">Services</h3>
 
@@ -677,7 +745,6 @@ const BusinessDashboard = () => {
                     {businessInfo?.businessName}
                   </h2>
 
-                  {/* Show current Visibility */}
                   <div className="text-xs inline-block px-2 py-1 rounded bg-gray-100 text-gray-700">
                     Visibility: {businessInfo?.visibility || "search"}
                   </div>
@@ -705,118 +772,89 @@ const BusinessDashboard = () => {
                   )}
                 </div>
 
-                {services.length > 0 && (
-                  <div className="mt-4 text-left border-t border-gray-300 py-4">
-                    <h3 className="text-gray-700 font-bold mb-2 text-center">Services Offered:</h3>
-                    <div className="mt-4">
-                      <div className="grid grid-cols-3 font-semibold text-sm border-b pb-1 mb-2 text-center">
-                        <span>Service</span>
-                        <span>Price</span>
-                        <span>Duration</span>
-                      </div>
-                      <ul className="space-y-1">
-                        {services.map((s, i) => (
-                          <li
-                            key={i}
-                            className="grid grid-cols-3 text-gray-700 text-sm border-b py-1 text-center"
-                          >
-                            <span>{s.name}</span>
-                            <span>${s.price.toFixed(2)}{s.pricePlus ? "+" : ""}</span>
-                            <span>{s.duration} mins</span>
-                          </li>
-                        ))}
-                      </ul>
+                <div className="mt-6">
+                  <button
+                    onClick={() => {
+                      setEditingProfile(true);
+                      setNameInput(businessInfo?.name || "");
+                      setBusinessNameInput(businessInfo?.businessName || "");
+                      setPhoneInput(businessInfo?.phone || "");
+                      setDescriptionInput(businessInfo?.description || "");
+                      setAvailabilityNote(businessInfo?.availabilityNote || "");
+                      setBusinessNameFontId(businessInfo?.businessNameFontId || "ui-sans");
+                      setVisibility((businessInfo?.visibility as Visibility) || "search");
+                    }}
+                    className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800"
+                  >
+                    Edit Profile
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800"
+                  >
+                    Delete Account
+                  </button>
+                </div>
+
+                {showDeleteConfirm && (
+                  <div className="mt-3 p-3 border rounded bg-red-50 text-left">
+                    <p className="text-sm text-red-800">
+                      This will permanently delete your profile, your profile picture, and all of your appointments. Type{" "}
+                      <span className="font-semibold">{businessInfo?.businessName || "DELETE"}</span>{" "}
+                      to confirm.
+                    </p>
+                    <input
+                      type="text"
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      className="mt-2 w-full border p-2 rounded"
+                      placeholder={`Type "${businessInfo?.businessName || "DELETE"}"`}
+                    />
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={
+                          deletingAccount ||
+                          (businessInfo?.businessName
+                            ? confirmText !== businessInfo.businessName
+                            : confirmText !== "DELETE")
+                        }
+                        className={`px-3 py-1 rounded text-white ${deletingAccount ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                          }`}
+                      >
+                        {deletingAccount ? "Deleting…" : "Confirm Delete"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowDeleteConfirm(false);
+                          setConfirmText("");
+                        }}
+                        className="px-3 py-1 rounded bg-gray-200"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
                 )}
               </>
             )}
-
-            {!editingProfile && (
-              <div className="mt-6">
-                <button
-                  onClick={() => {
-                    setEditingProfile(true);
-                    setNameInput(businessInfo?.name || "");
-                    setBusinessNameInput(businessInfo?.businessName || "");
-                    setPhoneInput(businessInfo?.phone || "");
-                    setDescriptionInput(businessInfo?.description || "");
-                    setAvailabilityNote(businessInfo?.availabilityNote || "");
-                    setBusinessNameFontId(businessInfo?.businessNameFontId || "ui-sans");
-                    setVisibility((businessInfo?.visibility as Visibility) || "search");
-                  }}
-                  className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800"
-                >
-                  Edit Profile
-                </button>
-              </div>
-            )}
-
-            {!editingProfile && (
-              <div className="mt-4">
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800"
-                >
-                  Delete Account
-                </button>
-              </div>
-            )}
-
-            {showDeleteConfirm && (
-              <div className="mt-3 p-3 border rounded bg-red-50 text-left">
-                <p className="text-sm text-red-800">
-                  This will permanently delete your profile, your profile picture, and all of your appointments. Type{" "}
-                  <span className="font-semibold">{businessInfo?.businessName || "DELETE"}</span>{" "}
-                  to confirm.
-                </p>
-                <input
-                  type="text"
-                  value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  className="mt-2 w-full border p-2 rounded"
-                  placeholder={`Type "${businessInfo?.businessName || "DELETE"}"`}
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={handleDeleteAccount}
-                    disabled={
-                      deletingAccount ||
-                      (businessInfo?.businessName
-                        ? confirmText !== businessInfo.businessName
-                        : confirmText !== "DELETE")
-                    }
-                    className={`px-3 py-1 rounded text-white ${
-                      deletingAccount ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
-                    }`}
-                  >
-                    {deletingAccount ? "Deleting…" : "Confirm Delete"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowDeleteConfirm(false);
-                      setConfirmText("");
-                    }}
-                    className="px-3 py-1 rounded bg-gray-200"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       ) : (
         <>
+          {/* Top controls */}
           <input
             type="text"
             placeholder="Search by customer name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full border p-2 rounded mb-6"
+            className="w-full border p-2 rounded mb-4"
           />
 
-          <div className="flex flex-wrap gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <button
               onClick={() => navigate("/dashboard/create-appointment")}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded"
@@ -830,57 +868,201 @@ const BusinessDashboard = () => {
             >
               View Past Appointments
             </button>
+
+            {/* View toggle */}
+            <div className="ml-auto inline-flex rounded overflow-hidden border">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`px-3 py-1 text-sm ${viewMode === "list" ? "bg-indigo-600 text-white" : "bg-white"}`}
+              >
+                List View
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode("calendar");
+                  const today = ymdFromDate(new Date());
+                  setSelectedDateYMD(today);
+                  setCalendarMonth(new Date(new Date(today).getFullYear(), new Date(today).getMonth(), 1));
+                }}
+                className={`px-3 py-1 text-sm ${viewMode === "calendar" ? "bg-indigo-600 text-white" : "bg-white"}`}
+              >
+                Calendar View
+              </button>
+            </div>
           </div>
 
-          {filtered.length === 0 ? (
-            <p className="text-gray-600">No appointments found.</p>
-          ) : (
-            <ul className="space-y-4">
-              {filtered.map((appt) => {
-                const isPast = apptTimestamp(appt) < Date.now();
-                const isCompleted = appt.active === false || appt.status === "completed";
-
-                return (
-                  <li
-                    key={appt.id}
-                    className={`border p-4 rounded shadow ${isPast ? "bg-gray-300" : "bg-white"}`}
+          {/* Calendar OR List */}
+          {viewMode === "calendar" ? (
+            <>
+              {/* Calendar header */}
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                  className="px-2 py-1 rounded border hover:bg-gray-50"
+                >
+                  ‹ Prev
+                </button>
+                <div className="font-semibold">
+                  {calendarMonth.toLocaleString("en-US", { month: "long", year: "numeric" })}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const d = new Date();
+                      setCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+                      setSelectedDateYMD(ymdFromDate(d));
+                    }}
+                    className="px-2 py-1 rounded border hover:bg-gray-50"
                   >
-                    <p className="font-semibold">Customer: {appt.customerName}</p>
-                    <p>Phone: {formatPhoneNumber(appt.customerPhone || "")}</p>
+                    Today
+                  </button>
+                  <button
+                    onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+                    className="px-2 py-1 rounded border hover:bg-gray-50"
+                  >
+                    Next ›
+                  </button>
+                </div>
+              </div>
 
-                    {editingApptId === appt.id ? (
-                      <>
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            type="date"
-                            value={editedDate}
-                            onChange={(e) => setEditedDate(e.target.value)}
-                            className="border p-1 rounded"
-                          />
-                          <input
-                            type="time"
-                            value={editedTime}
-                            onChange={(e) => setEditedTime(e.target.value)}
-                            className="border p-1 rounded"
-                          />
+              {/* Weekday headers */}
+              <div className="grid grid-cols-7 text-center text-xs uppercase tracking-wide text-gray-500 mb-1">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => (
+                  <div key={w} className="py-2">{w}</div>
+                ))}
+              </div>
+
+              {/* Month grid */}
+              <div className="grid grid-cols-7 gap-1">
+                {getMonthMatrix(calendarMonth).flat().map((cell, idx) => {
+                  if (!cell) {
+                    return <div key={idx} className="h-20 rounded border bg-gray-50/40" />;
+                  }
+                  const ymd = ymdFromDate(cell);
+                  const isThisMonth = cell.getMonth() === calendarMonth.getMonth();
+                  const isToday = ymd === ymdFromDate(new Date());
+                  const isSelected = selectedDateYMD === ymd;
+                  const count = (apptsByDate[ymd]?.length ?? 0);
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedDateYMD(ymd)}
+                      className={`h-20 w-full rounded border p-2 text-left relative
+                        ${isThisMonth ? "bg-white" : "bg-gray-50 text-gray-400"}
+                        ${isSelected ? "ring-2 ring-indigo-500" : ""}
+                        ${isToday ? "border-indigo-400" : ""}
+                        hover:bg-indigo-50`}
+                      title={count > 0 ? `${count} appointment${count > 1 ? "s" : ""}` : ""}
+                    >
+                      <div className="text-sm font-medium">{cell.getDate()}</div>
+
+                      {/* dots */}
+                      {count > 0 && (
+                        <div className="absolute bottom-2 left-2 flex gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                          {count >= 2 && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                          )}
+                          {count >= 3 && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                          )}
                         </div>
-                        <div className="flex gap-2 mt-2">
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selected day’s appointments */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-2">
+                  {selectedDateYMD
+                    ? `Appointments on ${toLocalDate(selectedDateYMD).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                    })}`
+                    : "Pick a day"}
+                </h3>
+
+                {selectedDateYMD && selectedDayAppts.length === 0 && (
+                  <p className="text-gray-600">No appointments found for this day.</p>
+                )}
+
+                {selectedDateYMD && selectedDayAppts.length > 0 && (
+                  <ul className="space-y-4">
+                    {selectedDayAppts.map((appt) => {
+                      const isPast = apptTimestamp(appt) < Date.now();
+                      const isCompleted = appt.active === false || appt.status === "completed";
+                      return (
+                        <li
+                          key={appt.id}
+                          className={`border p-4 rounded shadow ${isPast ? "bg-gray-300" : "bg-white"}`}
+                        >
+                          <p className="font-semibold">Customer: {appt.customerName}</p>
+                          <p>Phone: {formatPhoneNumber(appt.customerPhone || "")}</p>
+                          <p>Time: {appt.time}</p>
+
+                          {typeof appt.note === "string" && appt.note.trim() !== "" && (
+                            <p className="mt-2 text-gray-700">
+                              <span className="font-semibold">Note:</span>{" "}
+                              <span className="whitespace-pre-wrap">{appt.note}</span>
+                            </p>
+                          )}
+
                           <button
-                            onClick={() => handleUpdateAppointment(appt.id)}
-                            className="bg-indigo-800 hover:bg-indigo-900 text-white px-3 py-1 rounded"
+                            onClick={() => navigate(`/dashboard/create-appointment/${appt.id}`)}
+                            className="mt-2 bg-indigo-800 hover:bg-indigo-900 text-white px-3 py-1 rounded"
                           >
-                            Save
+                            Edit
                           </button>
+
                           <button
-                            onClick={() => setEditingApptId(null)}
-                            className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded"
+                            onClick={() => handleDeleteAppointment(appt.id)}
+                            disabled={deletingId === appt.id}
+                            className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id
+                              ? "bg-gray-700 cursor-not-allowed"
+                              : "bg-gray-700 hover:bg-red-900"
+                              }`}
                           >
-                            Cancel
+                            {deletingId === appt.id ? "Deleting..." : "Delete"}
                           </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
+
+                          {isPast && !isCompleted && (
+                            <button
+                              onClick={() => handleCompleteAppointment(appt.id)}
+                              className="mt-2 ml-2 px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white"
+                              title="Mark this appointment as completed"
+                            >
+                              Complete
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {filtered.length === 0 ? (
+                <p className="text-gray-600">No appointments found.</p>
+              ) : (
+                <ul className="space-y-4">
+                  {filtered.map((appt) => {
+                    const isPast = apptTimestamp(appt) < Date.now();
+                    const isCompleted = appt.active === false || appt.status === "completed";
+
+                    return (
+                      <li
+                        key={appt.id}
+                        className={`border p-4 rounded shadow ${isPast ? "bg-gray-300" : "bg-white"}`}
+                      >
+                        <p className="font-semibold">Customer: {appt.customerName}</p>
+                        <p>Phone: {formatPhoneNumber(appt.customerPhone || "")}</p>
                         <p>
                           Date:{" "}
                           {toLocalDate(appt.date).toLocaleDateString("en-US", {
@@ -899,38 +1081,74 @@ const BusinessDashboard = () => {
                           </p>
                         )}
 
-                        <button
-                          onClick={() => navigate(`/dashboard/create-appointment/${appt.id}`)}
-                          className="mt-2 bg-indigo-800 hover:bg-indigo-900 text-white px-3 py-1 rounded"
-                        >
-                          Edit
-                        </button>
+                        {editingApptId === appt.id ? (
+                          <>
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                type="date"
+                                value={editedDate}
+                                onChange={(e) => setEditedDate(e.target.value)}
+                                className="border p-1 rounded"
+                              />
+                              <input
+                                type="time"
+                                value={editedTime}
+                                onChange={(e) => setEditedTime(e.target.value)}
+                                className="border p-1 rounded"
+                              />
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => handleUpdateAppointment(appt.id)}
+                                className="bg-indigo-800 hover:bg-indigo-900 text-white px-3 py-1 rounded"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingApptId(null)}
+                                className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => navigate(`/dashboard/create-appointment/${appt.id}`)}
+                              className="mt-2 bg-indigo-800 hover:bg-indigo-900 text-white px-3 py-1 rounded"
+                            >
+                              Edit
+                            </button>
 
-                        <button
-                          onClick={() => handleDeleteAppointment(appt.id)}
-                          disabled={deletingId === appt.id}
-                          className={`mt-2 ml-2 px-3 py-1 rounded text-white ${
-                            deletingId === appt.id ? "bg-gray-700 cursor-not-allowed" : "bg-gray-700 hover:bg-red-900"
-                          }`}
-                        >
-                          {deletingId === appt.id ? "Deleting..." : "Delete"}
-                        </button>
+                            <button
+                              onClick={() => handleDeleteAppointment(appt.id)}
+                              disabled={deletingId === appt.id}
+                              className={`mt-2 ml-2 px-3 py-1 rounded text-white ${deletingId === appt.id
+                                ? "bg-gray-700 cursor-not-allowed"
+                                : "bg-gray-700 hover:bg-red-900"
+                                }`}
+                            >
+                              {deletingId === appt.id ? "Deleting..." : "Delete"}
+                            </button>
 
-                        {isPast && !isCompleted && (
-                          <button
-                            onClick={() => handleCompleteAppointment(appt.id)}
-                            className="mt-2 ml-2 px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white"
-                            title="Mark this appointment as completed"
-                          >
-                            Complete
-                          </button>
+                            {isPast && !isCompleted && (
+                              <button
+                                onClick={() => handleCompleteAppointment(appt.id)}
+                                className="mt-2 ml-2 px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white"
+                                title="Mark this appointment as completed"
+                              >
+                                Complete
+                              </button>
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
           )}
         </>
       )}
