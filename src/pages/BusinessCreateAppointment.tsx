@@ -615,7 +615,7 @@ const BusinessCreateAppointment = () => {
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Add a note for the appointment (optional)"
+          placeholder="Add a note to self (optional)"
           className="border p-2 rounded w-full mt-4 resize-none"
           rows={3}
         />
