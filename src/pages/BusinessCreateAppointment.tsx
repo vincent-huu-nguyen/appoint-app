@@ -624,7 +624,7 @@ const BusinessCreateAppointment = () => {
         <button
           onClick={handleSave}
           disabled={saving}
-          className={`mt-6 px-4 py-3 rounded text-white w-full transition ${
+          className={`mt-6 px-4 py-2 rounded text-white w-full transition ${
             saving ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
           }`}
         >
